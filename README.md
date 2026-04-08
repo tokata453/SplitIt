@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
   # Enhance SplitIt Feature
 
@@ -9,3 +10,6 @@
 
   Run `npm run dev` to start the development server.
   
+=======
+# SplitIt
+>>>>>>> d26d7a2a3285b8984f0fcaa513729e77d1db6b50
