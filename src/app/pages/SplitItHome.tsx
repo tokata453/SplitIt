@@ -39,7 +39,7 @@ export function SplitItHome() {
 
   const totalOwed = activeGroups
     .filter((group) => group.role === 'participant' && !group.paid)
-    .reduce((sum, group) => sum + group.yourShare, 0);
+    .reduce((sum, group) => sum + group.yourShare + (group.recurring?.unpaidCarryoverAmount ?? 0), 0);
   const totalSettled = completedGroups.reduce(
     (sum, group) => sum + (group.role === 'owner' ? group.totalAmount : group.yourShare),
     0
