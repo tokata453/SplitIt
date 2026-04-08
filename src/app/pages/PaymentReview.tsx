@@ -1,7 +1,15 @@
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getGroupById, Group } from '../utils/splitItData';
+import {
+  getGroupById,
+  getRecurringOwnerOutstanding,
+  getRecurringParticipantOutstanding,
+  getRecurringCurrentUserCarryover,
+  getRecurringCurrentUserCycleAmount,
+  getRecurringCurrentUserCycleStatus,
+  Group,
+} from '../utils/splitItData';
 import { fetchGroupById, onGroupsChanged, patchGroup } from '../utils/splitItApi';
 
 function syncActiveRecurringCycle(group: Group, membersList: Group['membersList']) {
@@ -35,6 +43,51 @@ function syncActiveRecurringCycle(group: Group, membersList: Group['membersList'
         status: outstandingAmount === 0 ? 'completed' : collectedAmount > 0 ? 'partial' : cycle.status,
       };
     }),
+  };
+}
+
+function applyRecurringPayment(group: Group) {
+  const currentUser = group.membersList.find((member) => member.isYou);
+
+  if (!group.recurring || !currentUser) {
+    return {
+      recurring: group.recurring,
+      paidAmount: group.yourShare,
+      activeMemberStatus: currentUser?.status ?? 'pending',
+    };
+  }
+
+  let paidAmount = 0;
+  let activeMemberStatus = currentUser.status;
+  const nextCycles = [...group.recurring.cycles]
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .map((cycle) => {
+      const cycleMember = cycle.members.find((member) => member.isYou || member.name === currentUser.name);
+
+      if (!cycleMember || cycleMember.status === 'paid') {
+        return cycle;
+      }
+
+      paidAmount += cycleMember.amount;
+      if (cycle.id === group.recurring?.activeCycleId) {
+        activeMemberStatus = 'paid';
+      }
+
+      return {
+        ...cycle,
+        members: cycle.members.map((member) => (
+          member.id === cycleMember.id ? { ...member, status: 'paid' as const } : member
+        )),
+      };
+    });
+
+  return {
+    recurring: {
+      ...group.recurring,
+      cycles: nextCycles,
+    },
+    paidAmount,
+    activeMemberStatus,
   };
 }
 
@@ -86,10 +139,21 @@ export function PaymentReview() {
   const currentUser = group.membersList.find((member) => member.isYou);
   const viewerRole = ((location.state as { viewerRole?: 'owner' | 'participant' } | null)?.viewerRole) ?? group.role;
   const isOwnerViewer = viewerRole === 'owner';
-  const currentStatus = currentUser?.status ?? 'pending';
+  const currentStatus = group.recurring && !isOwnerViewer
+    ? getRecurringCurrentUserCycleStatus(group) ?? (currentUser?.status ?? 'pending')
+    : currentUser?.status ?? 'pending';
   const isReadOnlyReview = currentStatus === 'paid' || currentStatus === 'rejected';
   const isPaidReview = currentStatus === 'paid';
   const isRejectedReview = currentStatus === 'rejected';
+  const hasApprovedState = isApproved || currentStatus === 'approved';
+  const recurringReviewAmount = group.recurring
+    ? (isOwnerViewer ? getRecurringOwnerOutstanding(group) : getRecurringParticipantOutstanding(group))
+    : 0;
+  const reviewAmount = group.recurring
+    ? recurringReviewAmount
+    : isOwnerViewer
+    ? group.totalAmount
+    : group.yourShare;
 
   const handleResplit = () => {
     navigate(`/splitit/group/${groupId}/split`, {
@@ -127,8 +191,9 @@ export function PaymentReview() {
     if (!groupId) return;
 
     setIsSaving(true);
-    await patchGroup(groupId, (currentGroup) => ({
+    const nextGroup = await patchGroup(groupId, (currentGroup) => ({
       ...currentGroup,
+      status: currentGroup.recurring ? 'active' : currentGroup.status,
       membersList: currentGroup.membersList.map((member) => (
         member.isYou ? { ...member, status: 'approved' } : member
       )),
@@ -143,12 +208,13 @@ export function PaymentReview() {
           id: `${currentGroup.id}-${Date.now()}`,
           date: new Date().toISOString().slice(0, 10),
           description: 'You approved your split and are ready to pay',
-          amount: currentGroup.yourShare,
+          amount: currentGroup.recurring ? getRecurringParticipantOutstanding(currentGroup) : currentGroup.yourShare,
           status: 'pending',
         },
         ...currentGroup.activities,
       ],
     }));
+    setGroup(nextGroup);
     setIsApproved(true);
     setIsSaving(false);
   };
@@ -156,35 +222,53 @@ export function PaymentReview() {
       if (!groupId) return;
 
       setIsSaving(true);
-      await patchGroup(groupId, (currentGroup) => {
+      const nextGroup = await patchGroup(groupId, (currentGroup) => {
+        const recurringPayment = applyRecurringPayment(currentGroup);
         const nextMembersList = currentGroup.membersList.map((member) => (
-          member.isYou ? { ...member, status: 'paid' } : member
+          member.isYou ? { ...member, status: recurringPayment.activeMemberStatus } : member
         ));
         const everyonePaid = nextMembersList.every((member) => member.status === 'paid');
+        const nextRecurring = currentGroup.recurring
+          ? syncActiveRecurringCycle(
+              {
+                ...currentGroup,
+                recurring: recurringPayment.recurring,
+              },
+              nextMembersList
+            )
+          : syncActiveRecurringCycle(currentGroup, nextMembersList);
+        const nextRecurringOutstanding = currentGroup.recurring
+          ? getRecurringParticipantOutstanding({
+              ...currentGroup,
+              membersList: nextMembersList,
+              recurring: nextRecurring,
+            })
+          : 0;
 
         return {
           ...currentGroup,
-          paid: true,
-          status: everyonePaid ? 'completed' : 'active',
+          paid: currentGroup.recurring ? nextRecurringOutstanding === 0 : true,
+          status: currentGroup.recurring ? 'active' : everyonePaid ? 'completed' : 'active',
           membersList: nextMembersList,
-          recurring: syncActiveRecurringCycle(currentGroup, nextMembersList),
+          recurring: nextRecurring,
           activities: [
             {
               id: `${currentGroup.id}-${Date.now()}`,
               date: new Date().toISOString().slice(0, 10),
               description: 'You completed payment',
-              amount: currentGroup.yourShare,
+              amount: currentGroup.recurring ? recurringPayment.paidAmount : currentGroup.yourShare,
               status: 'paid',
             },
             ...currentGroup.activities,
           ],
         };
       });
+      setGroup(nextGroup);
       setIsSaving(false);
 
       navigate('/splitit/payment-success', {
         state: {
-          amount: group.yourShare,
+          amount: reviewAmount,
         },
       });
     };
@@ -194,7 +278,7 @@ export function PaymentReview() {
     setIsSaving(true);
     await patchGroup(groupId, (currentGroup) => ({
       ...currentGroup,
-      status: 'pending',
+      status: currentGroup.recurring ? 'active' : 'pending',
       paid: false,
       membersList: currentGroup.membersList.map((member) => (
         member.isYou ? { ...member, status: 'rejected', note: rejectReason } : member
@@ -240,7 +324,7 @@ export function PaymentReview() {
           <div className="rounded-2xl bg-white/10 px-4 py-5 text-center">
             <p className="text-sm text-white/60 mb-2">{group.name}</p>
             <p className="text-4xl font-semibold text-white">
-              ${isOwnerViewer ? group.totalAmount.toFixed(2) : group.yourShare.toFixed(2)}
+              ${reviewAmount.toFixed(2)}
             </p>
             <p className="mt-2 text-xs text-white/70">
               {isOwnerViewer
@@ -251,7 +335,7 @@ export function PaymentReview() {
                 ? 'Payment completed.'
                 : isRejectedReview
                 ? 'You rejected this bill.'
-                : isApproved
+                : hasApprovedState
                 ? 'Approved. Ready for payment.'
                 : 'Review the split before payment.'}
             </p>
@@ -278,11 +362,26 @@ export function PaymentReview() {
               </div>
             )}
 
+            {group.recurring && !isOwnerViewer && (
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 mb-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">Current cycle</span>
+                  <span className="text-sm font-medium text-slate-900">${getRecurringCurrentUserCycleAmount(group).toFixed(2)}</span>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-sm text-slate-500">Carryover unpaid</span>
+                  <span className="text-sm font-medium text-red-600">
+                    ${getRecurringCurrentUserCarryover(group).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-500">Total</span>
                 <span className="text-lg font-semibold text-slate-900">
-                  ${isOwnerViewer ? group.totalAmount.toFixed(2) : group.yourShare.toFixed(2)}
+                  ${reviewAmount.toFixed(2)}
                 </span>
               </div>
             </div>
@@ -303,7 +402,7 @@ export function PaymentReview() {
             }`}>
               {isPaidReview ? 'Paid' : 'Rejected'}
             </div>
-          ) : isApproved ? (
+          ) : hasApprovedState ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                 <CheckCircle className="h-4 w-4" />

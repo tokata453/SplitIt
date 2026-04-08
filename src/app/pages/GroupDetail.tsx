@@ -1,7 +1,15 @@
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, CheckCircle, Clock, AlertCircle, Share2, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { getGroupById, Group } from '../utils/splitItData';
+import {
+  getGroupById,
+  getRecurringActiveCycle,
+  getRecurringCarryoverAmount,
+  getRecurringCurrentUserCarryover,
+  getRecurringOwnerOutstanding,
+  getRecurringParticipantOutstanding,
+  Group,
+} from '../utils/splitItData';
 import { fetchGroupById, onGroupsChanged } from '../utils/splitItApi';
 
 export function GroupDetail() {
@@ -55,9 +63,14 @@ export function GroupDetail() {
     .reduce((sum, member) => sum + member.amount, 0);
   const currentUser = group.membersList.find((member) => member.isYou);
   const canParticipantReview = group.role === 'participant';
-  const activeCycle = group.recurring?.cycles.find((cycle) => cycle.id === group.recurring?.activeCycleId) ?? group.recurring?.cycles[0];
+  const activeCycle = getRecurringActiveCycle(group);
   const cycleHistory = group.recurring?.cycles.filter((cycle) => cycle.id !== activeCycle?.id) ?? [];
-  const recurringOutstanding = (activeCycle?.outstandingAmount ?? 0) + (group.recurring?.unpaidCarryoverAmount ?? 0);
+  const recurringOutstanding = group.role === 'owner'
+    ? getRecurringOwnerOutstanding(group)
+    : getRecurringParticipantOutstanding(group);
+  const recurringCarryover = group.role === 'owner'
+    ? getRecurringCarryoverAmount(group)
+    : getRecurringCurrentUserCarryover(group);
   const cycleStatusStyles = {
     due: 'bg-amber-50 text-amber-700',
     partial: 'bg-blue-50 text-blue-700',
@@ -197,48 +210,48 @@ export function GroupDetail() {
                   <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-slate-400">Current cycle</p>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Current bill</p>
                         <p className="mt-1 font-medium text-slate-900">{activeCycle.label}</p>
                         <p className="mt-1 text-sm text-slate-500">
-                          Due {activeCycle.dueDate} • Next {group.recurring.nextCycleDate}
+                          Due on {activeCycle.dueDate} • Next bill {group.recurring.nextCycleDate}
                         </p>
                       </div>
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${cycleStatusStyles[activeCycle.status]}`}>
-                        {activeCycle.status}
+                        {activeCycle.status === 'partial' ? 'Partly paid' : activeCycle.status}
                       </span>
                     </div>
 
                     <div className="mt-4 grid grid-cols-3 gap-3">
                       <div className="rounded-xl bg-slate-50 px-3 py-3">
-                        <p className="text-xs text-slate-500">Cycle total</p>
+                        <p className="text-xs text-slate-500">This bill</p>
                         <p className="mt-1 font-semibold text-slate-900">${activeCycle.totalAmount.toFixed(2)}</p>
                       </div>
                       <div className="rounded-xl bg-slate-50 px-3 py-3">
-                        <p className="text-xs text-slate-500">Collected</p>
+                        <p className="text-xs text-slate-500">Already paid</p>
                         <p className="mt-1 font-semibold text-emerald-600">${activeCycle.collectedAmount.toFixed(2)}</p>
                       </div>
                       <div className="rounded-xl bg-slate-50 px-3 py-3">
-                        <p className="text-xs text-slate-500">Outstanding</p>
+                        <p className="text-xs text-slate-500">Still unpaid</p>
                         <p className="mt-1 font-semibold text-slate-900">${activeCycle.outstandingAmount.toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
 
-                  {group.recurring.unpaidCarryoverAmount > 0 && (
+                  {recurringCarryover > 0 && (
                     <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4">
-                      <p className="text-xs uppercase tracking-wide text-red-500">Carryover unpaid</p>
+                      <p className="text-xs uppercase tracking-wide text-red-500">Previous unpaid</p>
                       <p className="mt-1 text-lg font-semibold text-red-700">
-                        ${group.recurring.unpaidCarryoverAmount.toFixed(2)}
+                        ${recurringCarryover.toFixed(2)}
                       </p>
                       <p className="mt-1 text-sm text-red-600">
-                        Unpaid sub-bills from previous cycles stay separate from the current cycle.
+                        This amount is from older bills and has not been paid yet.
                       </p>
                     </div>
                   )}
 
                   <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
                     <div className="mb-3 flex items-center justify-between">
-                      <p className="font-medium text-slate-900">Cycle history</p>
+                      <p className="font-medium text-slate-900">Bill history</p>
                       <span className="text-xs text-slate-400">{group.recurring.rule}</span>
                     </div>
                     <div className="space-y-3">
@@ -248,11 +261,11 @@ export function GroupDetail() {
                             <div>
                               <p className="text-sm font-medium text-slate-900">{cycle.label}</p>
                               <p className="mt-1 text-xs text-slate-500">
-                                Due {cycle.dueDate} • Outstanding ${cycle.outstandingAmount.toFixed(2)}
+                                Due on {cycle.dueDate} • Unpaid ${cycle.outstandingAmount.toFixed(2)}
                               </p>
                             </div>
                             <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${cycleStatusStyles[cycle.status]}`}>
-                              {cycle.status}
+                              {cycle.status === 'partial' ? 'Partly paid' : cycle.status}
                             </span>
                           </div>
                         </div>

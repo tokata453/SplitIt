@@ -2,7 +2,16 @@ import { useNavigate } from 'react-router';
 import { ArrowLeft, Plus, Users, Clock, CheckCircle, DollarSign, TrendingUp, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { fetchGroups, onGroupsChanged } from '../utils/splitItApi';
-import { getGroups, Group } from '../utils/splitItData';
+import {
+  getGroups,
+  getRecurringActiveCycle,
+  getRecurringCarryoverAmount,
+  getRecurringCurrentUserCarryover,
+  getRecurringCurrentUserCycleStatus,
+  getRecurringOwnerOutstanding,
+  getRecurringParticipantOutstanding,
+  Group,
+} from '../utils/splitItData';
 
 export function SplitItHome() {
   const navigate = useNavigate();
@@ -39,7 +48,7 @@ export function SplitItHome() {
 
   const totalOwed = activeGroups
     .filter((group) => group.role === 'participant' && !group.paid)
-    .reduce((sum, group) => sum + group.yourShare + (group.recurring?.unpaidCarryoverAmount ?? 0), 0);
+    .reduce((sum, group) => sum + (group.recurring ? getRecurringParticipantOutstanding(group) : group.yourShare), 0);
   const totalSettled = completedGroups.reduce(
     (sum, group) => sum + (group.role === 'owner' ? group.totalAmount : group.yourShare),
     0
@@ -121,12 +130,15 @@ export function SplitItHome() {
                   const currentUser = group.membersList.find((member) => member.isYou);
                   const hasRejectedMember = group.membersList.some((member) => member.status === 'rejected');
                   const isCurrentUserRejected = currentUser?.status === 'rejected';
-                  const activeCycle = group.recurring?.cycles.find((cycle) => cycle.id === group.recurring?.activeCycleId) ?? group.recurring?.cycles[0];
-                  const carryoverAmount = group.recurring?.unpaidCarryoverAmount ?? 0;
+                  const activeCycle = getRecurringActiveCycle(group);
+                  const carryoverAmount = group.role === 'owner'
+                    ? getRecurringCarryoverAmount(group)
+                    : getRecurringCurrentUserCarryover(group);
+                  const recurringCurrentStatus = getRecurringCurrentUserCycleStatus(group);
                   const amount = group.billingMode === 'recurring'
                     ? group.role === 'owner'
-                      ? (activeCycle?.outstandingAmount ?? 0) + carryoverAmount
-                      : group.yourShare + carryoverAmount
+                      ? getRecurringOwnerOutstanding(group)
+                      : getRecurringParticipantOutstanding(group)
                     : group.role === 'owner'
                     ? (group.ownerCollectionAmount ?? 0)
                     : group.yourShare;
@@ -135,7 +147,17 @@ export function SplitItHome() {
                       ? 'Needs revision'
                       : amount > 0
                       ? 'Collecting'
+                      : group.billingMode === 'recurring'
+                      ? 'On track'
                       : 'Completed'
+                    : group.billingMode === 'recurring'
+                    ? recurringCurrentStatus === 'rejected'
+                      ? 'Rejected'
+                      : recurringCurrentStatus === 'approved'
+                      ? 'Pay now'
+                      : amount > 0
+                      ? 'Awaiting review'
+                      : 'Paid'
                     : isCurrentUserRejected
                     ? 'Rejected'
                     : hasRejectedMember

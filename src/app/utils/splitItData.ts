@@ -87,11 +87,176 @@ function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
 }
 
-export function validateGroupBilling(group: Group) {
-  const subBillTotal = roundCurrency(
-    group.membersList.reduce((sum, member) => sum + member.amount, 0)
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeRecurringCycleStatus(cycle: RecurringCycle) {
+  if (cycle.outstandingAmount <= 0) {
+    return 'completed' as const;
+  }
+
+  if (cycle.status === 'upcoming' && cycle.dueDate >= getTodayKey()) {
+    return 'upcoming' as const;
+  }
+
+  if (cycle.dueDate < getTodayKey()) {
+    return 'overdue' as const;
+  }
+
+  return cycle.collectedAmount > 0 ? 'partial' as const : 'due' as const;
+}
+
+export function getRecurringCarryoverAmount(group: Group) {
+  if (!group.recurring) {
+    return 0;
+  }
+
+  return roundCurrency(
+    group.recurring.cycles
+      .filter((cycle) => cycle.id !== group.recurring?.activeCycleId && cycle.outstandingAmount > 0)
+      .reduce((sum, cycle) => sum + cycle.outstandingAmount, 0)
   );
-  const totalAmount = roundCurrency(group.totalAmount);
+}
+
+export function getRecurringActiveCycle(group: Group) {
+  if (!group.recurring) {
+    return undefined;
+  }
+
+  return group.recurring.cycles.find((cycle) => cycle.id === group.recurring?.activeCycleId) ?? group.recurring.cycles[0];
+}
+
+export function getRecurringCurrentUserCycleMember(group: Group) {
+  const currentUser = group.membersList.find((member) => member.isYou);
+  const activeCycle = getRecurringActiveCycle(group);
+
+  if (!currentUser || !activeCycle) {
+    return undefined;
+  }
+
+  return activeCycle.members.find((member) => member.isYou || member.name === currentUser.name);
+}
+
+export function getRecurringCurrentUserCycleAmount(group: Group) {
+  return roundCurrency(getRecurringCurrentUserCycleMember(group)?.amount ?? 0);
+}
+
+export function getRecurringCurrentUserCycleStatus(group: Group) {
+  return getRecurringCurrentUserCycleMember(group)?.status;
+}
+
+export function getRecurringCurrentUserCarryover(group: Group) {
+  const currentUser = group.membersList.find((member) => member.isYou);
+
+  if (!group.recurring || !currentUser) {
+    return 0;
+  }
+
+  return roundCurrency(
+    group.recurring.cycles
+      .filter((cycle) => cycle.id !== group.recurring?.activeCycleId)
+      .reduce((sum, cycle) => {
+        const cycleMember = cycle.members.find((member) => member.isYou || member.name === currentUser.name);
+        if (!cycleMember || cycleMember.status === 'paid') {
+          return sum;
+        }
+
+        return sum + cycleMember.amount;
+      }, 0)
+  );
+}
+
+export function getRecurringParticipantOutstanding(group: Group) {
+  const currentUser = group.membersList.find((member) => member.isYou);
+
+  if (!group.recurring || !currentUser) {
+    return 0;
+  }
+
+  return roundCurrency(
+    group.recurring.cycles.reduce((sum, cycle) => {
+      const cycleMember = cycle.members.find((member) => member.isYou || member.name === currentUser.name);
+      if (!cycleMember || cycleMember.status === 'paid') {
+        return sum;
+      }
+
+      return sum + cycleMember.amount;
+    }, 0)
+  );
+}
+
+export function getRecurringOwnerOutstanding(group: Group) {
+  if (!group.recurring) {
+    return group.ownerCollectionAmount ?? 0;
+  }
+
+  return roundCurrency(
+    group.recurring.cycles.reduce((sum, cycle) => sum + cycle.outstandingAmount, 0)
+  );
+}
+
+function normalizeGroup(group: Group): Group {
+  if (!group.recurring) {
+    return group;
+  }
+
+  const nextCycles = group.recurring.cycles.map((cycle) => {
+    const collectedAmount = roundCurrency(
+      cycle.members.filter((member) => member.status === 'paid').reduce((sum, member) => sum + member.amount, 0)
+    );
+    const outstandingAmount = roundCurrency(
+      cycle.members.filter((member) => member.status !== 'paid').reduce((sum, member) => sum + member.amount, 0)
+    );
+
+    return {
+      ...cycle,
+      collectedAmount,
+      outstandingAmount,
+      status: normalizeRecurringCycleStatus({
+        ...cycle,
+        collectedAmount,
+        outstandingAmount,
+      }),
+    };
+  });
+
+  const nextRecurring: RecurringGroup = {
+    ...group.recurring,
+    cycles: nextCycles,
+    unpaidCarryoverAmount: roundCurrency(
+      nextCycles
+        .filter((cycle) => cycle.id !== group.recurring?.activeCycleId && cycle.outstandingAmount > 0)
+        .reduce((sum, cycle) => sum + cycle.outstandingAmount, 0)
+    ),
+  };
+  const activeCycle = nextCycles.find((cycle) => cycle.id === nextRecurring.activeCycleId) ?? nextCycles[0];
+  const currentUser = group.membersList.find((member) => member.isYou);
+  const activeCycleUser = activeCycle?.members.find((member) => member.isYou || member.name === currentUser?.name);
+  const totalRecurringOutstanding = roundCurrency(nextCycles.reduce((sum, cycle) => sum + cycle.outstandingAmount, 0));
+
+  return {
+    ...group,
+    recurring: nextRecurring,
+    status: group.recurring ? 'active' : group.status,
+    ownerCollectionAmount: group.role === 'owner' ? totalRecurringOutstanding : group.ownerCollectionAmount,
+    yourShare: group.role === 'participant' ? roundCurrency(activeCycleUser?.amount ?? group.yourShare) : group.yourShare,
+    paid:
+      group.role === 'participant'
+        ? getRecurringParticipantOutstanding({
+            ...group,
+            recurring: nextRecurring,
+          }) === 0
+        : group.paid,
+  };
+}
+
+export function validateGroupBilling(group: Group) {
+  const nextGroup = normalizeGroup(group);
+  const subBillTotal = roundCurrency(
+    nextGroup.membersList.reduce((sum, member) => sum + member.amount, 0)
+  );
+  const totalAmount = roundCurrency(nextGroup.totalAmount);
   const difference = roundCurrency(totalAmount - subBillTotal);
 
   return {
@@ -745,11 +910,13 @@ function emitGroupsUpdate() {
 }
 
 function seedGroupsStorage() {
-  if (typeof window === 'undefined') return mockGroups;
+  const seededGroups = mockGroups.map((group) => normalizeGroup(group));
 
-  window.localStorage.setItem(SPLITIT_GROUPS_KEY, JSON.stringify(mockGroups));
+  if (typeof window === 'undefined') return seededGroups;
+
+  window.localStorage.setItem(SPLITIT_GROUPS_KEY, JSON.stringify(seededGroups));
   window.localStorage.setItem(SPLITIT_GROUPS_VERSION_KEY, SPLITIT_GROUPS_VERSION);
-  return mockGroups;
+  return seededGroups;
 }
 
 export function getGroups() {
@@ -759,7 +926,7 @@ export function getGroups() {
     const storedGroups = window.localStorage.getItem(SPLITIT_GROUPS_KEY);
     const storedVersion = window.localStorage.getItem(SPLITIT_GROUPS_VERSION_KEY);
     return storedGroups && storedVersion === SPLITIT_GROUPS_VERSION
-      ? (JSON.parse(storedGroups) as Group[])
+      ? (JSON.parse(storedGroups) as Group[]).map((group) => normalizeGroup(group))
       : seedGroupsStorage();
   } catch {
     return seedGroupsStorage();
@@ -769,7 +936,9 @@ export function getGroups() {
 export function saveGroups(groups: Group[]) {
   if (typeof window === 'undefined') return;
 
-  const invalidGroup = groups.find((group) => !validateGroupBilling(group).isValid);
+  const normalizedGroups = groups.map((group) => normalizeGroup(group));
+
+  const invalidGroup = normalizedGroups.find((group) => !validateGroupBilling(group).isValid);
   if (invalidGroup) {
     const validation = validateGroupBilling(invalidGroup);
     throw new Error(
@@ -777,7 +946,7 @@ export function saveGroups(groups: Group[]) {
     );
   }
 
-  window.localStorage.setItem(SPLITIT_GROUPS_KEY, JSON.stringify(groups));
+  window.localStorage.setItem(SPLITIT_GROUPS_KEY, JSON.stringify(normalizedGroups));
   window.localStorage.setItem(SPLITIT_GROUPS_VERSION_KEY, SPLITIT_GROUPS_VERSION);
   emitGroupsUpdate();
 }
@@ -822,11 +991,24 @@ export function getGroupById(groupId?: string) {
 }
 
 export function getUnpaidBills() {
-  return getGroups().filter((group) => group.role === 'participant' && group.status !== 'completed' && !group.paid);
+  return getGroups().filter((group) => {
+    if (group.role !== 'participant' || group.status === 'completed') {
+      return false;
+    }
+
+    if (group.recurring) {
+      return getRecurringParticipantOutstanding(group) > 0;
+    }
+
+    return !group.paid;
+  });
 }
 
 export function getTotalOwed() {
-  return getUnpaidBills().reduce((sum, group) => sum + group.yourShare, 0);
+  return getUnpaidBills().reduce(
+    (sum, group) => sum + (group.recurring ? getRecurringParticipantOutstanding(group) : group.yourShare),
+    0
+  );
 }
 
 export function getUnpaidCount() {
