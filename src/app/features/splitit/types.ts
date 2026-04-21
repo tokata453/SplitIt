@@ -1,4 +1,4 @@
-export type SplitMethod = 'equal' | 'custom';
+export type SplitMethod = 'equal' | 'amount' | 'percentage' | 'shares';
 export type NotificationStatus = 'queued' | 'delivered' | 'viewed';
 export type SplitCurrency = 'USD' | 'KHR';
 
@@ -29,6 +29,13 @@ export interface SplitAllocation {
   amount: number;
 }
 
+export interface SplitReceiptItem {
+  id: string;
+  label: string;
+  amount: number;
+  assignedParticipantIds: string[];
+}
+
 export interface SplitNotification {
   id: string;
   participantId: string;
@@ -52,6 +59,7 @@ export interface SplitRequest {
   participantIds: string[];
   transactionId?: string;
   receiptFileName?: string;
+  receiptItems?: SplitReceiptItem[];
   note?: string;
   allocations: SplitAllocation[];
   notifications: SplitNotification[];
@@ -64,7 +72,10 @@ export interface SplitDraft {
   participantIds: string[];
   splitMethod: SplitMethod;
   customAmounts: Record<string, string>;
+  percentageShares: Record<string, string>;
+  unitShares: Record<string, string>;
   receiptFileName?: string;
+  receiptItems: SplitReceiptItem[];
   note: string;
 }
 

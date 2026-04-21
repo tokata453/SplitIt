@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { clearDraft, getPreviousSplitParticipantIds, loadDraft, saveDraft } from './api';
 import { splitItDefaultDraft } from './mockData';
-import { SplitDraft, SplitRequest } from './types';
+import { SplitDraft, SplitReceiptItem, SplitRequest } from './types';
 import { buildSplitCalculation, getTransactionById } from './utils';
 
 interface SplitItContextValue {
@@ -15,7 +15,11 @@ interface SplitItContextValue {
   toggleParticipant: (participantId: string) => void;
   setSplitMethod: (method: SplitDraft['splitMethod']) => void;
   setCustomAmount: (participantId: string, amount: string) => void;
+  setPercentageShare: (participantId: string, amount: string) => void;
+  setUnitShare: (participantId: string, amount: string) => void;
   setReceiptFileName: (fileName?: string) => void;
+  setReceiptItems: (items: SplitReceiptItem[]) => void;
+  toggleReceiptItemParticipant: (itemId: string, participantId: string) => void;
   setNote: (note: string) => void;
   setLastSentRequest: (request: SplitRequest | null) => void;
   resetDraft: () => void;
@@ -95,15 +99,28 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
           ? currentDraft.participantIds.filter((id) => id !== participantId)
           : [...currentDraft.participantIds, participantId];
         const customAmounts = { ...currentDraft.customAmounts };
+        const percentageShares = { ...currentDraft.percentageShares };
+        const unitShares = { ...currentDraft.unitShares };
+        const receiptItems = currentDraft.receiptItems.map((item) => ({
+          ...item,
+          assignedParticipantIds: exists
+            ? item.assignedParticipantIds.filter((id) => id !== participantId)
+            : item.assignedParticipantIds,
+        }));
 
         if (exists) {
           delete customAmounts[participantId];
+          delete percentageShares[participantId];
+          delete unitShares[participantId];
         }
 
         return {
           ...currentDraft,
           participantIds,
           customAmounts,
+          percentageShares,
+          unitShares,
+          receiptItems,
         };
       });
     },
@@ -122,10 +139,49 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
         },
       }));
     },
+    setPercentageShare: (participantId, amount) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        percentageShares: {
+          ...currentDraft.percentageShares,
+          [participantId]: amount,
+        },
+      }));
+    },
+    setUnitShare: (participantId, amount) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        unitShares: {
+          ...currentDraft.unitShares,
+          [participantId]: amount,
+        },
+      }));
+    },
     setReceiptFileName: (fileName) => {
       setDraft((currentDraft) => ({
         ...currentDraft,
         receiptFileName: fileName,
+      }));
+    },
+    setReceiptItems: (items) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        receiptItems: items,
+      }));
+    },
+    toggleReceiptItemParticipant: (itemId, participantId) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        receiptItems: currentDraft.receiptItems.map((item) => (
+          item.id !== itemId
+            ? item
+            : {
+                ...item,
+                assignedParticipantIds: item.assignedParticipantIds.includes(participantId)
+                  ? item.assignedParticipantIds.filter((id) => id !== participantId)
+                  : [...item.assignedParticipantIds, participantId],
+              }
+        )),
       }));
     },
     setNote: (note) => {

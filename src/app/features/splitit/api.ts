@@ -81,8 +81,30 @@ export async function saveDraft(draft: SplitDraft) {
   return draft;
 }
 
+function normalizeDraft(draft: Partial<SplitDraft> | null | undefined, initialDraft: SplitDraft): SplitDraft {
+  return {
+    ...initialDraft,
+    ...draft,
+    participantIds: draft?.participantIds ?? initialDraft.participantIds,
+    customAmounts: {
+      ...initialDraft.customAmounts,
+      ...(draft?.customAmounts ?? {}),
+    },
+    percentageShares: {
+      ...initialDraft.percentageShares,
+      ...(draft?.percentageShares ?? {}),
+    },
+    unitShares: {
+      ...initialDraft.unitShares,
+      ...(draft?.unitShares ?? {}),
+    },
+    receiptItems: draft?.receiptItems ?? initialDraft.receiptItems,
+  };
+}
+
 export function loadDraft(initialDraft: SplitDraft) {
-  return readJson<SplitDraft>(DRAFT_STORAGE_KEY, initialDraft);
+  const storedDraft = readJson<Partial<SplitDraft> | null>(DRAFT_STORAGE_KEY, null);
+  return normalizeDraft(storedDraft, initialDraft);
 }
 
 export function getPreviousSplitParticipantIds() {
@@ -140,6 +162,7 @@ export async function sendSplitRequest(draft: SplitDraft) {
     participantIds: draft.participantIds,
     transactionId: draft.selectedTransactionId,
     receiptFileName: draft.receiptFileName,
+    receiptItems: draft.receiptItems.length ? draft.receiptItems : undefined,
     note: draft.note.trim() || undefined,
     allocations: calculation.allocations,
     notifications,

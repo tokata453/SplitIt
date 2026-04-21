@@ -1,7 +1,7 @@
 import { Users } from 'lucide-react';
 import { getUsersByIds } from '../utils';
 import { SplitDraft } from '../types';
-import { formatCurrency } from '../utils';
+import { formatCurrency, getSplitMethodLabel } from '../utils';
 import { SectionCard } from './SectionCard';
 
 export function LiveSplitSummary({
@@ -30,7 +30,7 @@ export function LiveSplitSummary({
               <Users className="h-3.5 w-3.5" />
               <span>{participants.length} participants</span>
             </div>
-            <p className="mt-1 text-sm font-medium capitalize">{draft.splitMethod} split</p>
+            <p className="mt-1 text-sm font-medium">{getSplitMethodLabel(draft.splitMethod)}</p>
           </div>
         </div>
 
@@ -56,11 +56,17 @@ export function LiveSplitSummary({
           )}
         </div>
 
-        {draft.splitMethod === 'custom' ? (
+        {draft.splitMethod !== 'equal' ? (
           <p className={`mt-4 text-sm ${remainingAmount === 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
-            {remainingAmount === 0
-              ? 'Custom allocations match the bill total.'
-              : `${formatCurrency(Math.abs(remainingAmount), draft.currency)} ${remainingAmount > 0 ? 'left to assign' : 'over allocated'}.`}
+            {draft.splitMethod === 'amount'
+              ? remainingAmount === 0
+                ? 'Entered amounts match the bill total.'
+                : `${formatCurrency(Math.abs(remainingAmount), draft.currency)} ${remainingAmount > 0 ? 'left to assign' : 'over allocated'}.`
+              : draft.splitMethod === 'percentage'
+                ? `${Math.abs(remainingAmount).toFixed(2)}% ${remainingAmount > 0 ? 'left to assign' : 'over allocated'}.`
+                : remainingAmount === 0
+                  ? 'Items are balanced across the bill total.'
+                  : `${formatCurrency(Math.abs(remainingAmount), draft.currency)} still tied to unassigned receipt items.`}
           </p>
         ) : null}
       </div>

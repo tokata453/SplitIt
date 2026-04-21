@@ -5,7 +5,7 @@ import { sendSplitRequest } from '../api';
 import { SectionCard } from '../components/SectionCard';
 import { SplitItLayout } from '../components/SplitItLayout';
 import { useSplitIt } from '../context';
-import { getUsersByIds, validateDraft, formatCurrency } from '../utils';
+import { getUsersByIds, validateDraft, formatCurrency, getSplitMethodLabel } from '../utils';
 
 export function ReviewSummaryPage() {
   const navigate = useNavigate();
@@ -71,7 +71,7 @@ export function ReviewSummaryPage() {
           <div className="border-l border-slate-100 px-3 py-2">
             <p className="text-[10px] uppercase tracking-[0.18em] text-slate-400">Split method</p>
             <p className="mt-1 text-sm font-semibold uppercase tracking-[0.08em] leading-none text-slate-900">
-              Equal
+              {getSplitMethodLabel(draft.splitMethod)}
             </p>
           </div>
         </div>
@@ -114,6 +114,29 @@ export function ReviewSummaryPage() {
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Request note</p>
                 <p className="mt-1 font-medium text-slate-900">{draft.note.trim()}</p>
+              </div>
+            ) : null}
+            {draft.splitMethod === 'shares' && draft.receiptItems.length ? (
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Receipt items</p>
+                <div className="mt-2 space-y-2">
+                  {draft.receiptItems.map((item) => {
+                    const assignedNames = item.assignedParticipantIds
+                      .map((participantId) => participants.find((participant) => participant.id === participantId)?.name)
+                      .filter(Boolean)
+                      .join(', ');
+
+                    return (
+                      <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-900">{item.label}</p>
+                          <p className="truncate text-slate-500">{assignedNames || 'Unassigned'}</p>
+                        </div>
+                        <p className="font-medium text-slate-900">{formatCurrency(item.amount, draft.currency)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
           </div>

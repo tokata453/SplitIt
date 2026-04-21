@@ -219,5 +219,8 @@ export const splitItDefaultDraft: SplitDraft = {
   participantIds: [],
   splitMethod: 'equal',
   customAmounts: {},
+  percentageShares: {},
+  unitShares: {},
+  receiptItems: [],
   note: '',
 };

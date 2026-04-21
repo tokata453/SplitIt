@@ -1,5 +1,12 @@
 import { splitItTransactions, splitItUsers } from './mockData';
-import { SplitCalculation, SplitCurrency, SplitDraft, SplitItTransaction, SplitItUser } from './types';
+import { SplitCalculation, SplitCurrency, SplitDraft, SplitItTransaction, SplitItUser, SplitReceiptItem } from './types';
+
+const splitMethodLabels = {
+  equal: 'Equal split',
+  amount: 'By amount',
+  percentage: 'By percentage',
+  shares: 'By items',
+} as const;
 
 export function formatCurrency(amount: number, currency: SplitCurrency = 'USD') {
   return new Intl.NumberFormat('en-US', {
@@ -39,6 +46,39 @@ export function getDraftAmount(draft: SplitDraft, transaction?: SplitItTransacti
   return parseAmount(draft.amountInput) || transaction?.amount || 0;
 }
 
+export function getSplitMethodLabel(method: SplitDraft['splitMethod']) {
+  return splitMethodLabels[method];
+}
+
+function roundCurrencyAmount(amount: number) {
+  return Number(amount.toFixed(2));
+}
+
+export function buildMockReceiptItems(totalAmount: number): SplitReceiptItem[] {
+  const safeTotal = roundCurrencyAmount(totalAmount);
+  if (safeTotal <= 0) {
+    return [];
+  }
+
+  const labels = ['Main course', 'Shared drink', 'Side order', 'Dessert'];
+  const weights = [0.4, 0.22, 0.2, 0.18];
+
+  return labels.map((label, index) => {
+    const amount = index === labels.length - 1
+      ? roundCurrencyAmount(safeTotal - labels.slice(0, index).reduce((sum, _, priorIndex) => {
+          return sum + roundCurrencyAmount(safeTotal * weights[priorIndex]);
+        }, 0))
+      : roundCurrencyAmount(safeTotal * weights[index]);
+
+    return {
+      id: `receipt-item-${index + 1}`,
+      label,
+      amount,
+      assignedParticipantIds: [],
+    };
+  });
+}
+
 export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
   const transaction = getTransactionById(draft.selectedTransactionId);
   const totalAmount = getDraftAmount(draft, transaction);
@@ -60,10 +100,10 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
   }
 
   if (draft.splitMethod === 'equal') {
-    const perPersonAmount = Number((totalAmount / participantCount).toFixed(2));
+    const perPersonAmount = roundCurrencyAmount(totalAmount / participantCount);
     const allocations = participants.map((participant, index) => {
       const amount = index === participants.length - 1
-        ? Number((totalAmount - perPersonAmount * index).toFixed(2))
+        ? roundCurrencyAmount(totalAmount - perPersonAmount * index)
         : perPersonAmount;
 
       return {
@@ -82,20 +122,87 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
     };
   }
 
+  if (draft.splitMethod === 'amount') {
+    const allocations = participants.map((participant) => ({
+      participantId: participant.id,
+      amount: roundCurrencyAmount(parseAmount(draft.customAmounts?.[participant.id] ?? '0')),
+    }));
+    const allocatedTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+    const remainingAmount = roundCurrencyAmount(totalAmount - allocatedTotal);
+
+    return {
+      totalAmount,
+      participantCount,
+      allocations,
+      perPersonAmount: participantCount ? roundCurrencyAmount(allocatedTotal / participantCount) : 0,
+      remainingAmount,
+      isValid: remainingAmount === 0 && allocations.every((allocation) => allocation.amount > 0),
+    };
+  }
+
+  if (draft.splitMethod === 'percentage') {
+    const rawPercentages = participants.map((participant) => parseAmount(draft.percentageShares?.[participant.id] ?? '0'));
+    const totalPercentage = rawPercentages.reduce((sum, value) => sum + value, 0);
+    const allocations = participants.map((participant, index) => {
+      const percentage = rawPercentages[index];
+      const amount = index === participants.length - 1
+        ? roundCurrencyAmount(totalAmount - participants.slice(0, index).reduce((sum, _, priorIndex) => {
+            return sum + roundCurrencyAmount(totalAmount * (rawPercentages[priorIndex] / 100));
+          }, 0))
+        : roundCurrencyAmount(totalAmount * (percentage / 100));
+
+      return {
+        participantId: participant.id,
+        amount: percentage > 0 ? amount : 0,
+      };
+    });
+    const allocatedTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
+    const remainingAmount = roundCurrencyAmount(totalAmount - allocatedTotal);
+
+    return {
+      totalAmount,
+      participantCount,
+      allocations,
+      perPersonAmount: participantCount ? roundCurrencyAmount(allocatedTotal / participantCount) : 0,
+      remainingAmount: roundCurrencyAmount(100 - totalPercentage),
+      isValid: roundCurrencyAmount(totalPercentage) === 100 && remainingAmount === 0 && rawPercentages.every((value) => value > 0),
+    };
+  }
+
+  const allocationsMap = new Map(participants.map((participant) => [participant.id, 0]));
+  let remainingAmount = 0;
+
+  draft.receiptItems.forEach((item) => {
+    if (!item.assignedParticipantIds.length) {
+      remainingAmount += item.amount;
+      return;
+    }
+
+    const perParticipantAmount = roundCurrencyAmount(item.amount / item.assignedParticipantIds.length);
+
+    item.assignedParticipantIds.forEach((participantId, index) => {
+      const amount = index === item.assignedParticipantIds.length - 1
+        ? roundCurrencyAmount(item.amount - perParticipantAmount * index)
+        : perParticipantAmount;
+      allocationsMap.set(participantId, roundCurrencyAmount((allocationsMap.get(participantId) ?? 0) + amount));
+    });
+  });
+
   const allocations = participants.map((participant) => ({
     participantId: participant.id,
-    amount: Number((parseAmount(draft.customAmounts[participant.id] ?? '0')).toFixed(2)),
+    amount: allocationsMap.get(participant.id) ?? 0,
   }));
   const allocatedTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
-  const remainingAmount = Number((totalAmount - allocatedTotal).toFixed(2));
+  const receiptItemsTotal = roundCurrencyAmount(draft.receiptItems.reduce((sum, item) => sum + item.amount, 0));
+  remainingAmount = roundCurrencyAmount(remainingAmount);
 
   return {
     totalAmount,
     participantCount,
     allocations,
-    perPersonAmount: participantCount ? Number((allocatedTotal / participantCount).toFixed(2)) : 0,
+    perPersonAmount: participantCount ? roundCurrencyAmount(allocatedTotal / participantCount) : 0,
     remainingAmount,
-    isValid: remainingAmount === 0 && allocations.every((allocation) => allocation.amount > 0),
+    isValid: Boolean(draft.receiptFileName) && draft.receiptItems.length > 0 && receiptItemsTotal === totalAmount && remainingAmount === 0,
   };
 }
 
@@ -113,10 +220,30 @@ export function validateDraft(draft: SplitDraft) {
     return 'Add at least one participant.';
   }
 
-  if (draft.splitMethod === 'custom' && !calculation.isValid) {
+  if (draft.splitMethod === 'amount' && !calculation.isValid) {
     return calculation.remainingAmount > 0
       ? `Allocate the remaining ${formatCurrency(calculation.remainingAmount, draft.currency)} before sending.`
-      : 'Custom amounts must match the total exactly.';
+      : 'Amounts must match the total exactly.';
+  }
+
+  if (draft.splitMethod === 'percentage' && !calculation.isValid) {
+    return `Percentages must add up to 100%.`;
+  }
+
+  if (draft.splitMethod === 'shares' && !calculation.isValid) {
+    if (!draft.receiptFileName) {
+      return 'Attach a receipt before using item split.';
+    }
+
+    if (!draft.receiptItems.length) {
+      return 'No receipt items were extracted yet.';
+    }
+
+    if (draft.receiptItems.some((item) => item.assignedParticipantIds.length === 0)) {
+      return 'Assign every receipt item before sending.';
+    }
+
+    return 'Receipt item total must match the bill total.';
   }
 
   return '';
