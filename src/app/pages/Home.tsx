@@ -58,7 +58,7 @@ export function Home() {
 
   const handleOpenSplitIt = () => {
     setShowSplitItAlert(false);
-    navigate('/splitit');
+    navigate('/splitit/create');
   };
 
   return (
@@ -177,7 +177,7 @@ export function Home() {
 
         <div className="px-4 mb-4">
           <button
-            onClick={() => navigate('/splitit')}
+            onClick={() => navigate('/splitit/create')}
             className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-4 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] relative"
           >
             {hasUnpaidBills && (

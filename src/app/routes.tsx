@@ -1,12 +1,12 @@
-import { createBrowserRouter } from "react-router";
+import { Navigate, createBrowserRouter } from "react-router";
 import { Home } from "./pages/Home";
-import { SplitItHome } from "./pages/SplitItHome";
-import { CreateGroup } from "./pages/CreateGroup";
-import { InvoiceEntry } from "./pages/InvoiceEntry";
-import { BillSplitter } from "./pages/BillSplitter";
-import { GroupDetail } from "./pages/GroupDetail";
-import { PaymentReview } from "./pages/PaymentReview";
-import { PaymentSuccess } from "./pages/PaymentSuccess";
+import { SplitItLandingPage } from "./features/splitit/pages/SplitItLandingPage";
+import { CreateBillPage } from "./features/splitit/pages/CreateBillPage";
+import { TransactionHistoryPage } from "./features/splitit/pages/TransactionHistoryPage";
+import { ParticipantPickerPage } from "./features/splitit/pages/ParticipantPickerPage";
+import { MoreDetailsPage } from "./features/splitit/pages/MoreDetailsPage";
+import { ReviewSummaryPage } from "./features/splitit/pages/ReviewSummaryPage";
+import { ParticipantRequestPage } from "./features/splitit/pages/ParticipantRequestPage";
 
 export const router = createBrowserRouter([
   {
@@ -15,30 +15,30 @@ export const router = createBrowserRouter([
   },
   {
     path: "/splitit",
-    Component: SplitItHome,
+    Component: () => <Navigate to="/splitit/create" replace />,
   },
   {
-    path: "/splitit/create-group",
-    Component: CreateGroup,
+    path: "/splitit/create",
+    Component: CreateBillPage,
   },
   {
-    path: "/splitit/group/:groupId",
-    Component: GroupDetail,
+    path: "/splitit/transactions",
+    Component: TransactionHistoryPage,
   },
   {
-    path: "/splitit/group/:groupId/invoice",
-    Component: InvoiceEntry,
+    path: "/splitit/participants",
+    Component: ParticipantPickerPage,
   },
   {
-    path: "/splitit/group/:groupId/split",
-    Component: BillSplitter,
+    path: "/splitit/more-details",
+    Component: MoreDetailsPage,
   },
   {
-    path: "/splitit/group/:groupId/review/:userId",
-    Component: PaymentReview,
+    path: "/splitit/review",
+    Component: ReviewSummaryPage,
   },
   {
-    path: "/splitit/payment-success",
-    Component: PaymentSuccess,
+    path: "/splitit/requests",
+    Component: ParticipantRequestPage,
   },
 ]);
