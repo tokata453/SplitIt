@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Eye, FileText, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { sendSplitRequest } from '../api';
 import { SectionCard } from '../components/SectionCard';
 import { SplitItLayout } from '../components/SplitItLayout';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { useSplitIt } from '../context';
-import { getUsersByIds, validateDraft, formatCurrency, getSplitMethodLabel } from '../utils';
+import { formatCurrency, getSplitMemberName, getSplitMembers, getSplitMethodLabel, validateDraft } from '../utils';
 
 export function ReviewSummaryPage() {
   const navigate = useNavigate();
-  const { draft, calculation, setLastSentRequest } = useSplitIt();
+  const { draft, calculation, receiptPreviewUrl, receiptPreviewType, setLastSentRequest } = useSplitIt();
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const participants = getUsersByIds(draft.participantIds);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const splitMembers = getSplitMembers(draft);
   const validationMessage = validateDraft(draft);
 
   const handleSend = async () => {
@@ -79,20 +81,20 @@ export function ReviewSummaryPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-900">Participants</h2>
+          <h2 className="text-base font-semibold text-slate-900">Split breakdown</h2>
           <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-            {participants.length}
+            {splitMembers.length}
           </div>
         </div>
         <div className="space-y-2">
-          {participants.map((participant) => {
-            const allocation = calculation.allocations.find((item) => item.participantId === participant.id);
+          {splitMembers.map((member) => {
+            const allocation = calculation.allocations.find((item) => item.participantId === member.id);
 
             return (
-              <div key={participant.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2.5">
+              <div key={member.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2.5">
                 <div className="min-w-0">
-                  <p className="font-medium text-slate-900">{participant.name}</p>
-                  <p className="truncate text-xs text-slate-500">{participant.accountId}</p>
+                  <p className="font-medium text-slate-900">{getSplitMemberName(member)}</p>
+                  <p className="truncate text-xs text-slate-500">{member.accountId}</p>
                 </div>
                 <p className="pl-4 text-base font-medium text-slate-900">{formatCurrency(allocation?.amount ?? 0, draft.currency)}</p>
               </div>
@@ -108,6 +110,16 @@ export function ReviewSummaryPage() {
               <div className="rounded-2xl bg-slate-50 px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Receipt</p>
                 <p className="mt-1 font-medium text-slate-900">{draft.receiptFileName}</p>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviewOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Preview receipt
+                  </button>
+                </div>
               </div>
             ) : null}
             {draft.note.trim() ? (
@@ -122,7 +134,8 @@ export function ReviewSummaryPage() {
                 <div className="mt-2 space-y-2">
                   {draft.receiptItems.map((item) => {
                     const assignedNames = item.assignedParticipantIds
-                      .map((participantId) => participants.find((participant) => participant.id === participantId)?.name)
+                      .map((participantId) => splitMembers.find((member) => member.id === participantId))
+                      .map((member) => (member ? getSplitMemberName(member) : undefined))
                       .filter(Boolean)
                       .join(', ');
 
@@ -148,6 +161,44 @@ export function ReviewSummaryPage() {
           {submitError}
         </div>
       ) : null}
+
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-md rounded-[22px]">
+          <DialogHeader>
+            <DialogTitle>Receipt preview</DialogTitle>
+            <DialogDescription>
+              Review the uploaded file before sending the request.
+            </DialogDescription>
+          </DialogHeader>
+
+          {receiptPreviewUrl ? (
+            receiptPreviewType.startsWith('image/') ? (
+              <img
+                src={receiptPreviewUrl}
+                alt={draft.receiptFileName ?? 'Receipt preview'}
+                className="max-h-[70vh] w-full rounded-[18px] border border-slate-200 object-contain"
+              />
+            ) : receiptPreviewType === 'application/pdf' ? (
+              <iframe
+                src={receiptPreviewUrl}
+                title={draft.receiptFileName ?? 'Receipt PDF preview'}
+                className="h-[70vh] w-full rounded-[18px] border border-slate-200"
+              />
+            ) : (
+              <div className="flex min-h-48 flex-col items-center justify-center rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                <FileText className="h-10 w-10 text-slate-400" />
+                <p className="mt-3 text-sm font-medium text-slate-900">{draft.receiptFileName}</p>
+                <p className="mt-1 text-sm text-slate-500">Preview is not available for this file type.</p>
+              </div>
+            )
+          ) : (
+            <div className="flex min-h-48 flex-col items-center justify-center rounded-[18px] border border-dashed border-slate-300 px-4 py-6 text-center">
+              <ImageIcon className="h-10 w-10 text-slate-400" />
+              <p className="mt-3 text-sm text-slate-500">Receipt preview is available after uploading a file.</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </SplitItLayout>
   );
 }

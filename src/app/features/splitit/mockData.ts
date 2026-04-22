@@ -1,10 +1,14 @@
 import { SplitDraft, SplitItTransaction, SplitItUser } from './types';
 
-export const splitItCurrentUser = {
+export const splitItCurrentUser: SplitItUser = {
   id: 'me',
   name: 'Rasmey Sophorn',
   initials: 'RS',
   accountId: 'AC-001-9921',
+  phone: '+855 12 120 991',
+  bank: 'Sathapana',
+  recentTransferCount: 0,
+  lastTransferAt: '2026-04-22T00:00:00.000Z',
 };
 
 export const splitItUsers: SplitItUser[] = [
@@ -216,6 +220,7 @@ export const splitItTransactions: SplitItTransaction[] = [
 export const splitItDefaultDraft: SplitDraft = {
   amountInput: '',
   currency: 'USD',
+  includeOwner: true,
   participantIds: [],
   splitMethod: 'equal',
   customAmounts: {},

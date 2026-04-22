@@ -69,6 +69,7 @@ export interface SplitDraft {
   amountInput: string;
   currency: SplitCurrency;
   selectedTransactionId?: string;
+  includeOwner: boolean;
   participantIds: string[];
   splitMethod: SplitMethod;
   customAmounts: Record<string, string>;

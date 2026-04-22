@@ -6,7 +6,7 @@ import { SplitItLayout } from '../components/SplitItLayout';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { useSplitIt } from '../context';
 import { SplitMethod } from '../types';
-import { buildMockReceiptItems, formatCurrency, getSplitMethodLabel, getUsersByIds } from '../utils';
+import { buildMockReceiptItems, formatCurrency, getSplitMemberName, getSplitMembers, getSplitMethodLabel } from '../utils';
 
 const splitMethodOptions: { id: SplitMethod; title: string; helper: string }[] = [
   { id: 'equal', title: 'Equal', helper: 'Split the total evenly.' },
@@ -19,52 +19,36 @@ const noteSuggestions = ['Dinner split', 'Team expense', 'Please confirm today']
 
 export function MoreDetailsPage() {
   const navigate = useNavigate();
-  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
-  const [receiptPreviewType, setReceiptPreviewType] = useState<string>('');
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const {
     draft,
     calculation,
+    receiptPreviewUrl,
+    receiptPreviewType,
+    setIncludeOwner,
     setSplitMethod,
     setCustomAmount,
     setPercentageShare,
     setReceiptFileName,
+    setReceiptPreview,
+    clearReceiptPreview,
     setReceiptItems,
     toggleReceiptItemParticipant,
     setNote,
   } = useSplitIt();
-  const participants = getUsersByIds(draft.participantIds);
+  const members = getSplitMembers(draft);
   const hasReceipt = Boolean(draft.receiptFileName);
-
-  useEffect(() => {
-    return () => {
-      if (receiptPreviewUrl) {
-        URL.revokeObjectURL(receiptPreviewUrl);
-      }
-    };
-  }, [receiptPreviewUrl]);
 
   const handleReceiptUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     const fileName = file?.name;
-
-    if (receiptPreviewUrl) {
-      URL.revokeObjectURL(receiptPreviewUrl);
-    }
-
-    setReceiptPreviewUrl(file ? URL.createObjectURL(file) : null);
-    setReceiptPreviewType(file?.type ?? '');
+    setReceiptPreview(file ? URL.createObjectURL(file) : null, file?.type ?? '');
     setReceiptFileName(fileName);
     setReceiptItems(fileName ? buildMockReceiptItems(calculation.totalAmount) : []);
   };
 
   const handleRemoveReceipt = () => {
-    if (receiptPreviewUrl) {
-      URL.revokeObjectURL(receiptPreviewUrl);
-    }
-
-    setReceiptPreviewUrl(null);
-    setReceiptPreviewType('');
+    clearReceiptPreview();
     setIsPreviewOpen(false);
     setReceiptFileName(undefined);
     setReceiptItems([]);
@@ -75,46 +59,46 @@ export function MoreDetailsPage() {
   };
 
   const fillEqualAmounts = () => {
-    if (!participants.length || calculation.totalAmount <= 0) {
+    if (!members.length || calculation.totalAmount <= 0) {
       return;
     }
 
-    const perPersonAmount = calculation.totalAmount / participants.length;
+    const perPersonAmount = calculation.totalAmount / members.length;
 
-    participants.forEach((participant, index) => {
-      const amount = index === participants.length - 1
+    members.forEach((member, index) => {
+      const amount = index === members.length - 1
         ? calculation.totalAmount - perPersonAmount * index
         : perPersonAmount;
 
-      setCustomAmount(participant.id, amount.toFixed(2));
+      setCustomAmount(member.id, amount.toFixed(2));
     });
   };
 
   const fillEqualPercentages = () => {
-    if (!participants.length) {
+    if (!members.length) {
       return;
     }
 
-    const basePercentage = 100 / participants.length;
+    const basePercentage = 100 / members.length;
 
-    participants.forEach((participant, index) => {
-      const value = index === participants.length - 1
+    members.forEach((member, index) => {
+      const value = index === members.length - 1
         ? 100 - basePercentage * index
         : basePercentage;
 
-      setPercentageShare(participant.id, value.toFixed(2));
+      setPercentageShare(member.id, value.toFixed(2));
     });
   };
 
   const clearMethodInputs = () => {
-    participants.forEach((participant) => {
-      setCustomAmount(participant.id, '');
-      setPercentageShare(participant.id, '');
+    members.forEach((member) => {
+      setCustomAmount(member.id, '');
+      setPercentageShare(member.id, '');
     });
   };
 
-  const percentageTotal = participants.reduce((sum, participant) => {
-    const value = Number(draft.percentageShares?.[participant.id] ?? '0');
+  const percentageTotal = members.reduce((sum, member) => {
+    const value = Number(draft.percentageShares?.[member.id] ?? '0');
     return sum + (Number.isFinite(value) ? value : 0);
   }, 0);
 
@@ -249,6 +233,36 @@ export function MoreDetailsPage() {
         ) : null}
       </SectionCard>
 
+      <SectionCard title="Split setup" description="Choose who should be included before adjusting the split method.">
+        <div className="rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Include you in the split</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {draft.includeOwner
+                  ? 'The total is shared between you and the selected participants.'
+                  : 'The total is shared only among the selected participants.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={draft.includeOwner}
+              onClick={() => setIncludeOwner(!draft.includeOwner)}
+              className={`relative inline-flex h-8 w-14 flex-shrink-0 items-center rounded-full transition ${
+                draft.includeOwner ? 'bg-slate-900' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-6 w-6 rounded-full bg-white shadow-sm transition ${
+                  draft.includeOwner ? 'translate-x-7' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+
       <SectionCard title="Split method" description="Choose one clear way to divide the bill.">
         <div className="grid grid-cols-2 gap-2">
           {splitMethodOptions.map((option) => {
@@ -348,48 +362,48 @@ export function MoreDetailsPage() {
 
         {draft.splitMethod === 'equal' ? (
           <div className="mt-4 rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">
-            SplitIt will divide the total equally across {participants.length || 0} participants.
+            SplitIt will divide the total equally across {members.length || 0} {members.length === 1 ? 'person' : 'people'} in this split.
           </div>
         ) : null}
 
         {draft.splitMethod === 'amount' ? (
           <div className="mt-4 space-y-2">
-            {participants.length ? (
-              participants.map((participant) => (
-                <div key={participant.id} className="flex items-center justify-between rounded-[18px] border border-slate-200 px-4 py-3">
+            {members.length ? (
+              members.map((member) => (
+                <div key={member.id} className="flex items-center justify-between rounded-[18px] border border-slate-200 px-4 py-3">
                   <div>
-                    <p className="font-medium text-slate-900">{participant.name}</p>
-                    <p className="text-xs text-slate-500">{participant.accountId}</p>
+                    <p className="font-medium text-slate-900">{getSplitMemberName(member)}</p>
+                    <p className="text-xs text-slate-500">{member.accountId}</p>
                   </div>
                   <input
                     inputMode="decimal"
-                    value={draft.customAmounts[participant.id] ?? ''}
-                    onChange={(event) => setCustomAmount(participant.id, event.target.value)}
+                    value={draft.customAmounts[member.id] ?? ''}
+                    onChange={(event) => setCustomAmount(member.id, event.target.value)}
                     placeholder="0.00"
                     className="h-11 w-24 rounded-xl border border-slate-200 px-3 text-right text-sm font-semibold text-slate-900 outline-none"
                   />
                 </div>
               ))
             ) : (
-              <div className="mt-4 rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">Add participants first.</div>
+              <div className="mt-4 rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">Add at least one participant first.</div>
             )}
           </div>
         ) : null}
 
         {draft.splitMethod === 'percentage' ? (
           <div className="mt-4 space-y-2">
-            {participants.length ? (
-              participants.map((participant) => (
-                <div key={participant.id} className="flex items-center justify-between rounded-[18px] border border-slate-200 px-4 py-3">
+            {members.length ? (
+              members.map((member) => (
+                <div key={member.id} className="flex items-center justify-between rounded-[18px] border border-slate-200 px-4 py-3">
                   <div>
-                    <p className="font-medium text-slate-900">{participant.name}</p>
-                    <p className="text-xs text-slate-500">{participant.accountId}</p>
+                    <p className="font-medium text-slate-900">{getSplitMemberName(member)}</p>
+                    <p className="text-xs text-slate-500">{member.accountId}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
                       inputMode="decimal"
-                      value={draft.percentageShares?.[participant.id] ?? ''}
-                      onChange={(event) => setPercentageShare(participant.id, event.target.value)}
+                      value={draft.percentageShares?.[member.id] ?? ''}
+                      onChange={(event) => setPercentageShare(member.id, event.target.value)}
                       placeholder="0"
                       className="h-11 w-20 rounded-xl border border-slate-200 px-3 text-right text-sm font-semibold text-slate-900 outline-none"
                     />
@@ -398,7 +412,7 @@ export function MoreDetailsPage() {
                 </div>
               ))
             ) : (
-              <div className="mt-4 rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">Add participants first.</div>
+              <div className="mt-4 rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">Add at least one participant first.</div>
             )}
           </div>
         ) : null}
@@ -409,12 +423,13 @@ export function MoreDetailsPage() {
               <div className="rounded-[18px] border border-dashed border-slate-300 px-4 py-4 text-sm text-slate-500">
                 Attach a receipt to extract items before assigning them.
               </div>
-            ) : !participants.length ? (
-              <div className="rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">Add participants first.</div>
+            ) : !members.length ? (
+              <div className="rounded-[18px] border border-slate-200 px-4 py-4 text-sm text-slate-500">Add at least one participant first.</div>
             ) : draft.receiptItems.length ? (
               draft.receiptItems.map((item) => {
                 const assignedNames = item.assignedParticipantIds
-                  .map((participantId) => participants.find((participant) => participant.id === participantId)?.name)
+                  .map((participantId) => members.find((member) => member.id === participantId))
+                  .map((member) => (member ? getSplitMemberName(member) : undefined))
                   .filter(Boolean)
                   .join(', ');
 
@@ -431,21 +446,21 @@ export function MoreDetailsPage() {
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {participants.map((participant) => {
-                        const isSelected = item.assignedParticipantIds.includes(participant.id);
+                      {members.map((member) => {
+                        const isSelected = item.assignedParticipantIds.includes(member.id);
 
                         return (
                           <button
-                            key={participant.id}
+                            key={member.id}
                             type="button"
-                            onClick={() => toggleReceiptItemParticipant(item.id, participant.id)}
+                            onClick={() => toggleReceiptItemParticipant(item.id, member.id)}
                             className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
                               isSelected
                                 ? 'border-slate-900 bg-slate-900 text-white'
                                 : 'border-slate-200 bg-white text-slate-700'
                             }`}
                           >
-                            {participant.name}
+                            {getSplitMemberName(member)}
                           </button>
                         );
                       })}

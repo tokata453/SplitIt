@@ -1,7 +1,6 @@
 import { Users } from 'lucide-react';
-import { getUsersByIds } from '../utils';
 import { SplitDraft } from '../types';
-import { formatCurrency, getSplitMethodLabel } from '../utils';
+import { formatCurrency, getSplitMemberName, getSplitMembers, getSplitMethodLabel } from '../utils';
 import { SectionCard } from './SectionCard';
 
 export function LiveSplitSummary({
@@ -15,7 +14,7 @@ export function LiveSplitSummary({
   allocations: { participantId: string; amount: number }[];
   remainingAmount: number;
 }) {
-  const participants = getUsersByIds(draft.participantIds);
+  const members = getSplitMembers(draft);
 
   return (
     <SectionCard title="Live split summary" description="Updates instantly as you change amount, participants, or split method.">
@@ -28,22 +27,22 @@ export function LiveSplitSummary({
           <div className="rounded-2xl bg-white/10 px-3 py-2 text-right">
             <div className="flex items-center gap-1 text-xs text-white/60">
               <Users className="h-3.5 w-3.5" />
-              <span>{participants.length} participants</span>
+              <span>{members.length} in this split</span>
             </div>
             <p className="mt-1 text-sm font-medium">{getSplitMethodLabel(draft.splitMethod)}</p>
           </div>
         </div>
 
         <div className="mt-4 space-y-2">
-          {participants.length ? (
-            participants.map((participant) => {
-              const allocation = allocations.find((item) => item.participantId === participant.id);
+          {members.length ? (
+            members.map((member) => {
+              const allocation = allocations.find((item) => item.participantId === member.id);
 
               return (
-                <div key={participant.id} className="flex items-center justify-between rounded-2xl bg-white/6 px-3 py-3">
+                <div key={member.id} className="flex items-center justify-between rounded-2xl bg-white/6 px-3 py-3">
                   <div>
-                    <p className="font-medium">{participant.name}</p>
-                    <p className="text-xs text-white/55">{participant.accountId}</p>
+                    <p className="font-medium">{getSplitMemberName(member)}</p>
+                    <p className="text-xs text-white/55">{member.accountId}</p>
                   </div>
                   <p className="font-medium">{formatCurrency(allocation?.amount ?? 0, draft.currency)}</p>
                 </div>
@@ -51,7 +50,7 @@ export function LiveSplitSummary({
             })
           ) : (
             <div className="rounded-2xl border border-dashed border-white/15 px-3 py-4 text-sm text-white/65">
-              Add participants to preview each share.
+              Add at least one participant to preview the split.
             </div>
           )}
         </div>

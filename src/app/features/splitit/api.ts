@@ -132,8 +132,11 @@ export async function sendSplitRequest(draft: SplitDraft) {
   const participants = getUsersByIds(draft.participantIds);
   const transaction = getTransactionById(draft.selectedTransactionId);
   const now = new Date().toISOString();
+  const participantAllocations = calculation.allocations.filter((allocation) =>
+    participants.some((participant) => participant.id === allocation.participantId)
+  );
 
-  const notifications: SplitNotification[] = calculation.allocations.map((allocation, index) => {
+  const notifications: SplitNotification[] = participantAllocations.map((allocation, index) => {
     const participant = participants.find((user) => user.id === allocation.participantId) as SplitItUser;
 
     return {

@@ -7,6 +7,7 @@ import { ParticipantPickerPage } from "./features/splitit/pages/ParticipantPicke
 import { MoreDetailsPage } from "./features/splitit/pages/MoreDetailsPage";
 import { ReviewSummaryPage } from "./features/splitit/pages/ReviewSummaryPage";
 import { ParticipantRequestPage } from "./features/splitit/pages/ParticipantRequestPage";
+import { SplitBillDashboardPage } from "./features/splitit/pages/SplitBillDashboardPage";
 
 export const router = createBrowserRouter([
   {
@@ -40,5 +41,9 @@ export const router = createBrowserRouter([
   {
     path: "/splitit/requests",
     Component: ParticipantRequestPage,
+  },
+  {
+    path: "/splitit/dashboard",
+    Component: SplitBillDashboardPage,
   },
 ]);

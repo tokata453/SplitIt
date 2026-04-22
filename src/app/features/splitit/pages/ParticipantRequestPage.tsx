@@ -1,4 +1,4 @@
-import { BellRing, CheckCircle2, Clock3, Eye } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { fetchSentRequests } from '../api';
@@ -6,25 +6,7 @@ import { SectionCard } from '../components/SectionCard';
 import { SplitItLayout } from '../components/SplitItLayout';
 import { useSplitIt } from '../context';
 import { SplitRequest } from '../types';
-import { formatCurrency, formatDate } from '../utils';
-
-const notificationMeta = {
-  queued: {
-    icon: Clock3,
-    label: 'Queued',
-    tone: 'bg-amber-50 text-amber-700',
-  },
-  delivered: {
-    icon: BellRing,
-    label: 'Delivered',
-    tone: 'bg-sky-50 text-sky-700',
-  },
-  viewed: {
-    icon: Eye,
-    label: 'Viewed',
-    tone: 'bg-emerald-50 text-emerald-700',
-  },
-};
+import { formatCurrency, formatDate, getSplitMethodLabel } from '../utils';
 
 export function ParticipantRequestPage() {
   const { lastSentRequest, resetDraft } = useSplitIt();
@@ -51,29 +33,28 @@ export function ParticipantRequestPage() {
   }, []);
 
   const activeRequest = lastSentRequest ?? requests[0];
-  const deliveredCount = activeRequest?.notifications.filter((notification) => notification.status === 'delivered').length ?? 0;
-  const viewedCount = activeRequest?.notifications.filter((notification) => notification.status === 'viewed').length ?? 0;
-  const queuedCount = activeRequest?.notifications.filter((notification) => notification.status === 'queued').length ?? 0;
+  const participantCount = activeRequest?.notifications.length ?? 0;
 
   return (
     <SplitItLayout
       title="Requests sent"
+      subtitle="Your split request has been delivered to participants."
       footer={
         <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => navigate('/splitit/dashboard')}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-900"
+          >
+            View dashboard
+          </button>
           <button
             onClick={() => {
               resetDraft();
               navigate('/splitit/create');
             }}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-900"
-          >
-            Start another split
-          </button>
-          <button
-            onClick={() => navigate('/')}
             className="rounded-2xl bg-[#2d4a6f] px-4 py-4 text-center text-sm font-semibold text-white"
           >
-            Done
+            Start another split
           </button>
         </div>
       }
@@ -84,57 +65,49 @@ export function ParticipantRequestPage() {
         </SectionCard>
       ) : activeRequest ? (
         <>
-          <SectionCard title="Requests sent">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-800">
-                <CheckCircle2 className="h-4 w-4" />
-                Request sent successfully.
+          <section className="overflow-hidden rounded-[28px] border border-emerald-200 bg-white shadow-[0_12px_30px_rgba(16,185,129,0.08)]">
+            <div className="bg-[linear-gradient(180deg,#f2fbf7_0%,#ffffff_100%)] px-5 py-6">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <CheckCircle2 className="h-8 w-8" />
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <div className="rounded-xl bg-white px-3 py-3">
-                  <p className="text-xs text-slate-500">Viewed</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{viewedCount}</p>
-                </div>
-                <div className="rounded-xl bg-white px-3 py-3">
-                  <p className="text-xs text-slate-500">Delivered</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{deliveredCount}</p>
-                </div>
-                <div className="rounded-xl bg-white px-3 py-3">
-                  <p className="text-xs text-slate-500">Queued</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{queuedCount}</p>
-                </div>
+              <div className="mt-4 text-center">
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-600">Success</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-slate-900">Request sent successfully</h2>
+                <p className="mt-2 text-sm text-slate-500">{formatDate(activeRequest.createdAt)}</p>
               </div>
 
-              <div className="mt-4 flex items-end justify-between gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">Total</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-[-0.03em] text-slate-900">
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-4 text-center">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Total amount</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
                     {formatCurrency(activeRequest.totalAmount, activeRequest.currency)}
                   </p>
                 </div>
-                <p className="text-sm text-slate-500">{formatDate(activeRequest.createdAt)}</p>
+
+                <div className="rounded-2xl bg-white px-4 py-4 text-center ring-1 ring-slate-200">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Split method</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {getSplitMethodLabel(activeRequest.splitMethod)}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white px-4 py-4 text-center ring-1 ring-slate-200">
+                  <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">Participants notified</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-900">{participantCount}</p>
+                </div>
               </div>
             </div>
-          </SectionCard>
+          </section>
 
           <SectionCard title="Participants">
             <div className="space-y-3">
               {activeRequest.notifications.map((notification) => {
-                const meta = notificationMeta[notification.status];
-                const Icon = meta.icon;
-
                 return (
                   <div key={notification.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900">{notification.participantName}</p>
-                        <p className="mt-1 text-sm text-slate-500">{notification.accountId}</p>
-                      </div>
-                      <div className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${meta.tone}`}>
-                        <Icon className="h-3.5 w-3.5" />
-                        {meta.label}
-                      </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900">{notification.participantName}</p>
+                      <p className="mt-1 text-sm text-slate-500">{notification.accountId}</p>
                     </div>
 
                     <div className="mt-4 flex items-center justify-between gap-3 text-sm">
@@ -151,7 +124,7 @@ export function ParticipantRequestPage() {
         <SectionCard title="No sent requests yet">
           <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center">
             <p className="font-medium text-slate-900">Your notification timeline is empty.</p>
-            <p className="mt-1 text-sm text-slate-500">Send a split request to see delivery and view states here.</p>
+            <p className="mt-1 text-sm text-slate-500">Send a split request to see it here.</p>
           </div>
         </SectionCard>
       )}

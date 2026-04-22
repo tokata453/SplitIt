@@ -1,4 +1,4 @@
-import { splitItTransactions, splitItUsers } from './mockData';
+import { splitItCurrentUser, splitItTransactions, splitItUsers } from './mockData';
 import { SplitCalculation, SplitCurrency, SplitDraft, SplitItTransaction, SplitItUser, SplitReceiptItem } from './types';
 
 const splitMethodLabels = {
@@ -42,6 +42,15 @@ export function getUsersByIds(userIds: string[]) {
     .filter((user): user is SplitItUser => Boolean(user));
 }
 
+export function getSplitMembers(draft: SplitDraft) {
+  const participants = getUsersByIds(draft.participantIds);
+  return draft.includeOwner ? [splitItCurrentUser, ...participants] : participants;
+}
+
+export function getSplitMemberName(user: SplitItUser) {
+  return user.id === splitItCurrentUser.id ? 'You' : user.name;
+}
+
 export function getDraftAmount(draft: SplitDraft, transaction?: SplitItTransaction) {
   return parseAmount(draft.amountInput) || transaction?.amount || 0;
 }
@@ -82,15 +91,15 @@ export function buildMockReceiptItems(totalAmount: number): SplitReceiptItem[] {
 export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
   const transaction = getTransactionById(draft.selectedTransactionId);
   const totalAmount = getDraftAmount(draft, transaction);
-  const participants = getUsersByIds(draft.participantIds);
-  const participantCount = participants.length;
+  const members = getSplitMembers(draft);
+  const participantCount = members.length;
 
   if (!participantCount || totalAmount <= 0) {
     return {
       totalAmount,
       participantCount,
-      allocations: participants.map((participant) => ({
-        participantId: participant.id,
+      allocations: members.map((member) => ({
+        participantId: member.id,
         amount: 0,
       })),
       perPersonAmount: 0,
@@ -101,13 +110,13 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
 
   if (draft.splitMethod === 'equal') {
     const perPersonAmount = roundCurrencyAmount(totalAmount / participantCount);
-    const allocations = participants.map((participant, index) => {
-      const amount = index === participants.length - 1
+    const allocations = members.map((member, index) => {
+      const amount = index === members.length - 1
         ? roundCurrencyAmount(totalAmount - perPersonAmount * index)
         : perPersonAmount;
 
       return {
-        participantId: participant.id,
+        participantId: member.id,
         amount,
       };
     });
@@ -123,9 +132,9 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
   }
 
   if (draft.splitMethod === 'amount') {
-    const allocations = participants.map((participant) => ({
-      participantId: participant.id,
-      amount: roundCurrencyAmount(parseAmount(draft.customAmounts?.[participant.id] ?? '0')),
+    const allocations = members.map((member) => ({
+      participantId: member.id,
+      amount: roundCurrencyAmount(parseAmount(draft.customAmounts?.[member.id] ?? '0')),
     }));
     const allocatedTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
     const remainingAmount = roundCurrencyAmount(totalAmount - allocatedTotal);
@@ -141,18 +150,18 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
   }
 
   if (draft.splitMethod === 'percentage') {
-    const rawPercentages = participants.map((participant) => parseAmount(draft.percentageShares?.[participant.id] ?? '0'));
+    const rawPercentages = members.map((member) => parseAmount(draft.percentageShares?.[member.id] ?? '0'));
     const totalPercentage = rawPercentages.reduce((sum, value) => sum + value, 0);
-    const allocations = participants.map((participant, index) => {
+    const allocations = members.map((member, index) => {
       const percentage = rawPercentages[index];
-      const amount = index === participants.length - 1
-        ? roundCurrencyAmount(totalAmount - participants.slice(0, index).reduce((sum, _, priorIndex) => {
+      const amount = index === members.length - 1
+        ? roundCurrencyAmount(totalAmount - members.slice(0, index).reduce((sum, _, priorIndex) => {
             return sum + roundCurrencyAmount(totalAmount * (rawPercentages[priorIndex] / 100));
           }, 0))
         : roundCurrencyAmount(totalAmount * (percentage / 100));
 
       return {
-        participantId: participant.id,
+        participantId: member.id,
         amount: percentage > 0 ? amount : 0,
       };
     });
@@ -169,7 +178,7 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
     };
   }
 
-  const allocationsMap = new Map(participants.map((participant) => [participant.id, 0]));
+  const allocationsMap = new Map(members.map((member) => [member.id, 0]));
   let remainingAmount = 0;
 
   draft.receiptItems.forEach((item) => {
@@ -188,9 +197,9 @@ export function buildSplitCalculation(draft: SplitDraft): SplitCalculation {
     });
   });
 
-  const allocations = participants.map((participant) => ({
-    participantId: participant.id,
-    amount: allocationsMap.get(participant.id) ?? 0,
+  const allocations = members.map((member) => ({
+    participantId: member.id,
+    amount: allocationsMap.get(member.id) ?? 0,
   }));
   const allocatedTotal = allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
   const receiptItemsTotal = roundCurrencyAmount(draft.receiptItems.reduce((sum, item) => sum + item.amount, 0));
@@ -217,7 +226,7 @@ export function validateDraft(draft: SplitDraft) {
   }
 
   if (!participants.length) {
-    return 'Add at least one participant.';
+    return 'Add at least one participant to send this split request.';
   }
 
   if (draft.splitMethod === 'amount' && !calculation.isValid) {

@@ -7,17 +7,22 @@ import { buildSplitCalculation, getTransactionById } from './utils';
 interface SplitItContextValue {
   draft: SplitDraft;
   lastSentRequest: SplitRequest | null;
-    calculation: ReturnType<typeof buildSplitCalculation>;
-    selectedTransactionTitle: string;
-    setAmountInput: (value: string) => void;
-    setCurrency: (currency: SplitDraft['currency']) => void;
-    selectTransaction: (transactionId?: string) => void;
+  calculation: ReturnType<typeof buildSplitCalculation>;
+  selectedTransactionTitle: string;
+  receiptPreviewUrl: string | null;
+  receiptPreviewType: string;
+  setAmountInput: (value: string) => void;
+  setCurrency: (currency: SplitDraft['currency']) => void;
+  selectTransaction: (transactionId?: string) => void;
+  setIncludeOwner: (includeOwner: boolean) => void;
   toggleParticipant: (participantId: string) => void;
   setSplitMethod: (method: SplitDraft['splitMethod']) => void;
   setCustomAmount: (participantId: string, amount: string) => void;
   setPercentageShare: (participantId: string, amount: string) => void;
   setUnitShare: (participantId: string, amount: string) => void;
   setReceiptFileName: (fileName?: string) => void;
+  setReceiptPreview: (url: string | null, type?: string) => void;
+  clearReceiptPreview: () => void;
   setReceiptItems: (items: SplitReceiptItem[]) => void;
   toggleReceiptItemParticipant: (itemId: string, participantId: string) => void;
   setNote: (note: string) => void;
@@ -45,10 +50,20 @@ function buildDraftWithPreviousParticipants(baseDraft: SplitDraft) {
 export function SplitItProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState<SplitDraft>(() => buildDraftWithPreviousParticipants(loadDraft(splitItDefaultDraft)));
   const [lastSentRequest, setLastSentRequest] = useState<SplitRequest | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
+  const [receiptPreviewType, setReceiptPreviewType] = useState('');
 
   useEffect(() => {
     void saveDraft(draft);
   }, [draft]);
+
+  useEffect(() => {
+    return () => {
+      if (receiptPreviewUrl) {
+        URL.revokeObjectURL(receiptPreviewUrl);
+      }
+    };
+  }, [receiptPreviewUrl]);
 
   const calculation = useMemo(() => buildSplitCalculation(draft), [draft]);
   const transaction = getTransactionById(draft.selectedTransactionId);
@@ -59,6 +74,8 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
     lastSentRequest,
     calculation,
     selectedTransactionTitle,
+    receiptPreviewUrl,
+    receiptPreviewType,
     setAmountInput: (value) => {
       setDraft((currentDraft) => {
         const selectedTransaction = getTransactionById(currentDraft.selectedTransactionId);
@@ -91,6 +108,36 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
         amountInput: transactionChoice ? transactionChoice.amount.toFixed(2) : currentDraft.amountInput,
         currency: transactionChoice?.currency ?? currentDraft.currency,
       }));
+    },
+    setIncludeOwner: (includeOwner) => {
+      setDraft((currentDraft) => {
+        if (includeOwner) {
+          return {
+            ...currentDraft,
+            includeOwner: true,
+          };
+        }
+
+        const customAmounts = { ...currentDraft.customAmounts };
+        const percentageShares = { ...currentDraft.percentageShares };
+        const unitShares = { ...currentDraft.unitShares };
+
+        delete customAmounts.me;
+        delete percentageShares.me;
+        delete unitShares.me;
+
+        return {
+          ...currentDraft,
+          includeOwner: false,
+          customAmounts,
+          percentageShares,
+          unitShares,
+          receiptItems: currentDraft.receiptItems.map((item) => ({
+            ...item,
+            assignedParticipantIds: item.assignedParticipantIds.filter((participantId) => participantId !== 'me'),
+          })),
+        };
+      });
     },
     toggleParticipant: (participantId) => {
       setDraft((currentDraft) => {
@@ -163,6 +210,24 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
         receiptFileName: fileName,
       }));
     },
+    setReceiptPreview: (url, type = '') => {
+      setReceiptPreviewUrl((currentUrl) => {
+        if (currentUrl && currentUrl !== url) {
+          URL.revokeObjectURL(currentUrl);
+        }
+        return url;
+      });
+      setReceiptPreviewType(type);
+    },
+    clearReceiptPreview: () => {
+      setReceiptPreviewUrl((currentUrl) => {
+        if (currentUrl) {
+          URL.revokeObjectURL(currentUrl);
+        }
+        return null;
+      });
+      setReceiptPreviewType('');
+    },
     setReceiptItems: (items) => {
       setDraft((currentDraft) => ({
         ...currentDraft,
@@ -193,6 +258,11 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
     setLastSentRequest,
     resetDraft: () => {
       clearDraft();
+      if (receiptPreviewUrl) {
+        URL.revokeObjectURL(receiptPreviewUrl);
+      }
+      setReceiptPreviewUrl(null);
+      setReceiptPreviewType('');
       setDraft(buildDraftWithPreviousParticipants(splitItDefaultDraft));
       setLastSentRequest(null);
     },
