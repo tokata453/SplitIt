@@ -9,6 +9,8 @@ import { ReviewSummaryPage } from "./features/splitit/pages/ReviewSummaryPage";
 import { ParticipantRequestPage } from "./features/splitit/pages/ParticipantRequestPage";
 import { SplitBillDashboardPage } from "./features/splitit/pages/SplitBillDashboardPage";
 import { SplitBillDetailPage } from "./features/splitit/pages/SplitBillDetailPage";
+import { SplitBillPaymentReviewPage } from "./features/splitit/pages/SplitBillPaymentReviewPage";
+import { SplitItNotificationCenterPage } from "./features/splitit/pages/SplitItNotificationCenterPage";
 import { PaymentSuccess } from "./pages/PaymentSuccess";
 
 export const router = createBrowserRouter([
@@ -51,6 +53,14 @@ export const router = createBrowserRouter([
   {
     path: "/splitit/dashboard/:role/:id",
     Component: SplitBillDetailPage,
+  },
+  {
+    path: "/splitit/notifications",
+    Component: SplitItNotificationCenterPage,
+  },
+  {
+    path: "/splitit/payment-review",
+    Component: SplitBillPaymentReviewPage,
   },
   {
     path: "/splitit/payment-success",

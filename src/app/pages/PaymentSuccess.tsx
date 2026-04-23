@@ -7,6 +7,7 @@ interface PaymentSuccessState {
   reference?: string;
   transactionId?: string;
   paidAt?: string;
+  hideSplitBill?: boolean;
 }
 
 export function PaymentSuccess() {
@@ -17,6 +18,7 @@ export function PaymentSuccess() {
   const merchant = payment.merchant ?? 'QR payment';
   const reference = payment.reference ?? `QR-${Date.now()}`;
   const paidAt = payment.paidAt ? new Date(payment.paidAt) : new Date();
+  const shouldHideSplitBill = Boolean(payment.hideSplitBill);
   const paidAtLabel = paidAt.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -111,13 +113,15 @@ export function PaymentSuccess() {
         </div>
 
         <div className="mt-auto space-y-3 pt-6">
-          <button
-            onClick={handleSplitBill}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ef4b50] px-4 py-4 text-base font-bold uppercase tracking-[0.16em] text-white"
-          >
-            <Split className="h-5 w-5" />
-            Split this bill
-          </button>
+          {!shouldHideSplitBill ? (
+            <button
+              onClick={handleSplitBill}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#ef4b50] px-4 py-4 text-base font-bold uppercase tracking-[0.16em] text-white"
+            >
+              <Split className="h-5 w-5" />
+              Split this bill
+            </button>
+          ) : null}
             <button
               onClick={() => navigate('/')}
               className="w-full rounded-2xl bg-white px-4 py-4 text-sm font-bold uppercase tracking-[0.14em] text-[#1e3a5f]"

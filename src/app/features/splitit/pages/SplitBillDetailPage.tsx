@@ -1,4 +1,4 @@
-import { ArrowRight, ReceiptText } from 'lucide-react';
+import { ArrowRight, BellRing, Clock3, ReceiptText } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { fetchIncomingRequests, fetchSentRequests } from '../api';
@@ -11,9 +11,17 @@ import {
   SplitIncomingStatus,
   SplitNotification,
   SplitParticipantPaymentStatus,
+  SplitReminderFrequency,
   SplitRequest,
 } from '../types';
 import { formatCurrency, formatDate, getSplitMethodLabel, getTransactionById } from '../utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../../components/ui/dialog';
 
 function getNotificationPaymentStatus(notification: SplitNotification): SplitParticipantPaymentStatus {
   return notification.paymentStatus ?? (notification.status === 'viewed' ? 'paid' : 'pending');
@@ -35,6 +43,13 @@ function getIncomingStatusLabel(status: SplitIncomingStatus) {
 function sumAmount<T extends { amount: number }>(items: T[]) {
   return items.reduce((total, item) => total + item.amount, 0);
 }
+
+const reminderOptions: { id: SplitReminderFrequency; label: string; helper: string }[] = [
+  { id: 'none', label: 'Off', helper: 'No automatic reminders for this bill.' },
+  { id: 'daily', label: 'Daily', helper: 'Send a reminder every day until it is paid.' },
+  { id: 'weekly', label: 'Weekly', helper: 'Send a reminder once every week.' },
+  { id: 'monthly', label: 'Monthly', helper: 'Send a reminder once every month.' },
+];
 
 function buildFallbackParticipants(request: SplitIncomingRequest): SplitIncomingParticipant[] {
   const remainingPeople = Math.max(request.participantCount - 1, 0);
@@ -86,12 +101,55 @@ function OwnerBillDetail({ request }: { request: SplitRequest }) {
   const amountReceived = sumAmount(paidPeople);
   const amountPending = sumAmount(pendingPeople);
   const paidCount = paidPeople.length;
+  const [isReminderDialogOpen, setIsReminderDialogOpen] = useState(false);
+  const [reminderFrequency, setReminderFrequency] = useState<SplitReminderFrequency>(
+    request.reminderSettings?.enabled ? request.reminderSettings.frequency : 'none'
+  );
+  const [ownerActionMessage, setOwnerActionMessage] = useState('');
+
+  const handleSendAlert = () => {
+    if (!pendingPeople.length) {
+      setOwnerActionMessage('Everyone has already paid for this bill.');
+      return;
+    }
+
+    const participantNames = pendingPeople.map((participant) => participant.participantName).join(', ');
+    setOwnerActionMessage(`Alert sent to ${pendingPeople.length} pending participant${pendingPeople.length > 1 ? 's' : ''}: ${participantNames}.`);
+  };
+
+  const currentReminderLabel = reminderOptions.find((option) => option.id === reminderFrequency)?.label ?? 'Off';
+  const footer = (
+    <div className="space-y-3">
+      {ownerActionMessage ? (
+        <p className="rounded-[18px] bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-700">
+          {ownerActionMessage}
+        </p>
+      ) : null}
+      <div className="flex gap-3">
+        <button
+          onClick={handleSendAlert}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#173b63] px-4 py-3 text-sm font-semibold text-white"
+        >
+          <BellRing className="h-4 w-4" />
+          Send alert
+        </button>
+        <button
+          onClick={() => setIsReminderDialogOpen(true)}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+        >
+          <Clock3 className="h-4 w-4" />
+          Reminder setting
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <SplitItLayout
       title="Bill detail"
       subtitle="Track who has paid and what is still waiting."
       backTo="/splitit/dashboard"
+      footer={footer}
     >
       <section className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
@@ -129,6 +187,10 @@ function OwnerBillDetail({ request }: { request: SplitRequest }) {
             <span className="text-slate-500">Total bill</span>
             <span className="font-semibold text-slate-900">{formatCurrency(request.totalAmount, request.currency)}</span>
           </div>
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500">Reminder</span>
+            <span className="font-semibold text-slate-900">{currentReminderLabel}</span>
+          </div>
           {request.note ? <p className="mt-3 text-sm leading-6 text-slate-500">{request.note}</p> : null}
         </div>
       </section>
@@ -163,6 +225,52 @@ function OwnerBillDetail({ request }: { request: SplitRequest }) {
           })}
         </div>
       </section>
+
+      <Dialog open={isReminderDialogOpen} onOpenChange={setIsReminderDialogOpen}>
+        <DialogContent className="max-w-sm rounded-[26px] border-0 bg-white p-0">
+          <DialogHeader className="border-b border-slate-100 px-5 py-4 text-left">
+            <DialogTitle className="text-lg text-slate-950">Reminder setting</DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              Choose how often SplitIt should remind unpaid participants.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 px-4 py-4">
+            {reminderOptions.map((option) => {
+              const isActive = reminderFrequency === option.id;
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setReminderFrequency(option.id);
+                    setOwnerActionMessage(`Reminder updated to ${option.label.toLowerCase()} for this bill.`);
+                    setIsReminderDialogOpen(false);
+                  }}
+                  className={`w-full rounded-[20px] border px-4 py-3 text-left transition ${
+                    isActive
+                      ? 'border-[#173b63] bg-[#edf3f8]'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{option.label}</p>
+                      <p className="mt-1 text-sm leading-5 text-slate-500">{option.helper}</p>
+                    </div>
+                    {isActive ? (
+                      <span className="rounded-full bg-[#173b63] px-2.5 py-1 text-xs font-semibold text-white">
+                        Active
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </SplitItLayout>
   );
 }
@@ -197,7 +305,21 @@ function ParticipantBillDetail({ request }: { request: SplitIncomingRequest }) {
         Reject
       </button>
       <button
-        onClick={() => setStatus('paid')}
+        onClick={() => {
+          navigate('/splitit/payment-review', {
+            state: {
+              amount: request.yourAmount,
+              currency: request.currency,
+              merchant: transaction?.merchant ?? 'Split bill payment',
+              ownerName: request.ownerName,
+              ownerAccountId: request.ownerAccountId,
+              reference: `BILL-${request.id.toUpperCase()}`,
+              transactionId: request.transactionId,
+              requestId: request.id,
+              returnTo: `/splitit/dashboard/participant/${request.id}`,
+            },
+          });
+        }}
         className="flex-1 rounded-2xl bg-[#2d4a6f] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-[#2d4a6f]/20"
       >
         Approve & pay

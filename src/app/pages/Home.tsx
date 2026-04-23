@@ -1,27 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Bell, ChevronRight, Home as HomeIcon, Users, CreditCard, Grid2x2, Split, Wallet, ScanLine, Smartphone, ReceiptText, ScrollText, ArrowUpRight, Star, X } from 'lucide-react';
+import { Bell, ChevronRight, Home as HomeIcon, Users, CreditCard, Grid2x2, Split, Wallet, ScanLine, Smartphone, ReceiptText, ScrollText, ArrowUpRight, Star } from 'lucide-react';
 import { fetchHomeSummary, onGroupsChanged } from '../utils/splitItApi';
 import { getTotalOwed, getUnpaidCount } from '../utils/splitItData';
-import { fetchIncomingRequests, fetchSentRequests } from '../features/splitit/api';
-import { SplitIncomingRequest, SplitRequest } from '../features/splitit/types';
 
-function getOwnerPendingAmount(requests: SplitRequest[]) {
-  return requests.reduce((total, request) => {
-    return total + request.notifications
-      .filter((notification) => notification.status !== 'viewed')
-      .reduce((requestTotal, notification) => requestTotal + notification.amount, 0);
-  }, 0);
-}
+function formatTimeAgo(date: Date) {
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.max(1, Math.floor(diffMs / (1000 * 60)));
 
-function getParticipantOweAmount(requests: SplitIncomingRequest[]) {
-  return requests.reduce((total, request) => {
-    if (request.status === 'pending_review' || request.status === 'payment_due') {
-      return total + request.yourAmount;
-    }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
 
-    return total;
-  }, 0);
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
 }
 
 export function Home() {
@@ -31,10 +28,7 @@ export function Home() {
     totalOwed: getTotalOwed(),
     unpaidCount: getUnpaidCount(),
   });
-  const [billSummary, setBillSummary] = useState({
-    ownerPending: 0,
-    participantOwe: 0,
-  });
+  const [alertStartedAt, setAlertStartedAt] = useState(() => new Date());
 
   useEffect(() => {
     let isMounted = true;
@@ -57,30 +51,6 @@ export function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadBillSummary = async () => {
-      const [sentRequests, incomingRequests] = await Promise.all([
-        fetchSentRequests(),
-        fetchIncomingRequests(),
-      ]);
-
-      if (!isMounted) return;
-
-      setBillSummary({
-        ownerPending: getOwnerPendingAmount(sentRequests),
-        participantOwe: getParticipantOweAmount(incomingRequests),
-      });
-    };
-
-    void loadBillSummary();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   const totalOwed = summary.totalOwed;
   const unpaidCount = summary.unpaidCount;
   const hasUnpaidBills = unpaidCount > 0;
@@ -92,15 +62,26 @@ export function Home() {
     }
 
     setShowSplitItAlert(true);
+    setAlertStartedAt(new Date());
   }, [hasUnpaidBills]);
 
-  const handleDismissAlert = () => {
-    setShowSplitItAlert(false);
-  };
+  useEffect(() => {
+    if (!showSplitItAlert) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowSplitItAlert(false);
+    }, 10000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [showSplitItAlert]);
 
   const handleOpenSplitIt = () => {
     setShowSplitItAlert(false);
-    navigate('/splitit/dashboard');
+    navigate('/splitit/notifications');
   };
 
   const handleScanToPay = () => {
@@ -119,46 +100,34 @@ export function Home() {
     <div className="min-h-screen bg-gradient-to-br from-[#1e3a5f] via-[#2d4a6f] to-[#1e3a5f]">
       {showSplitItAlert && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-50 pointer-events-none">
-          <div className="w-full overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-2xl backdrop-blur-xl pointer-events-auto">
-            <div className="px-4 py-4">
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[#173b63] text-white">
-                  <Split className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-slate-900">SplitIt reminder</p>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Now</span>
-                  </div>
-                  <p className="mt-1 text-sm leading-5 text-slate-600">
-                    {unpaidCount} unpaid {unpaidCount === 1 ? 'bill' : 'bills'} waiting. You owe ${totalOwed.toFixed(2)}.
-                  </p>
-                </div>
-                <button
-                  onClick={handleDismissAlert}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
-                  aria-label="Dismiss SplitIt reminder"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+          <button
+            type="button"
+            onClick={handleOpenSplitIt}
+            className="pointer-events-auto w-full overflow-hidden rounded-[24px] border border-white/80 bg-white/95 px-4 py-4 text-left shadow-2xl backdrop-blur-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+                <img
+                  src="https://play-lh.googleusercontent.com/1EZF8Qyofhne2zbJBwCLQl95dN-UA7qVIsF32g1trC2NXsI979C-QYFpj-TWhgfx3X8"
+                  alt="Sathapana logo"
+                  className="h-9 w-9 rounded-xl object-cover"
+                />
               </div>
-
-              <div className="mt-4 flex gap-2">
-                <button
-                  onClick={handleOpenSplitIt}
-                  className="flex-1 rounded-2xl bg-[#173b63] py-3 text-sm font-semibold text-white"
-                >
-                  Review bills
-                </button>
-                <button
-                  onClick={handleDismissAlert}
-                  className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600"
-                >
-                  Later
-                </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">Sathapana Bank</p>
+                    <p className="mt-1 text-sm leading-5 text-slate-600">
+                      SplitIt reminder: {unpaidCount} unpaid {unpaidCount === 1 ? 'bill' : 'bills'} waiting. You owe ${totalOwed.toFixed(2)}.
+                    </p>
+                  </div>
+                  <span className="shrink-0 pt-0.5 text-xs font-medium text-slate-400">
+                    {formatTimeAgo(alertStartedAt)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          </button>
         </div>
       )}
 
@@ -184,7 +153,7 @@ export function Home() {
                   <Users className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Good Morning, រស្មី​សោភ័ណ្ឌ</p>
+                  <p className="text-sm text-gray-600">Good Morning, ស៊ុយ បញ្ញាសិទ្ធិ</p>
                   <p className="text-xs text-gray-400">View Profile</p>
                 </div>
               </div>
@@ -235,59 +204,39 @@ export function Home() {
         </div>
 
         <div className="px-4 mb-4">
-          <div className="w-full rounded-[28px] bg-white/95 p-4 shadow-lg relative">
+          <button
+            type="button"
+            onClick={() => navigate('/splitit/dashboard')}
+            className="relative w-full rounded-[24px] bg-gradient-to-r from-[#10c587] via-[#0fb689] to-[#0aa39f] px-4 py-3 text-left shadow-[0_14px_28px_rgba(7,22,58,0.18)]"
+          >
             {hasUnpaidBills && (
-              <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-white shadow-lg">
-                <span className="text-white text-xs font-bold">{unpaidCount}</span>
+              <div className="absolute -right-2 -top-2 flex h-8 min-w-8 items-center justify-center rounded-full border-[3px] border-white bg-[#ff3b30] px-1 shadow-md">
+                <span className="text-xs font-bold leading-none text-white">{unpaidCount}</span>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
-                  <Split className="w-6 h-6 text-emerald-700" />
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-[18px] bg-white/18 backdrop-blur-sm">
+                  <Split className="h-7 w-7 text-white" />
                 </div>
-                <div className="text-left">
-                  <p className="text-slate-900 font-bold text-lg">SplitIt</p>
-                  <p className="text-slate-500 text-sm">Shared bill control center</p>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <p className="text-[1.2rem] font-bold tracking-[-0.03em] text-white">SplitIt</p>
+                  </div>
+                  <p className="mt-1 text-sm font-medium text-white/88">Shared bill control center</p>
                 </div>
               </div>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                {hasUnpaidBills ? 'Action needed' : 'Updated'}
-              </span>
-            </div>
 
-            <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">To receive</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">${billSummary.ownerPending.toFixed(2)}</p>
-                </div>
-                <div className="h-10 w-px bg-slate-200" />
-                <div className="text-right">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">You owe</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">${billSummary.participantOwe.toFixed(2)}</p>
-                </div>
+              <div className="flex flex-col items-end justify-between gap-4 pr-1">
+                <span className="rounded-full bg-white/20 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-white/90">
+                  New
+                </span>
+                <ChevronRight className="h-6 w-6 text-white/90" />
               </div>
             </div>
-
-            <div className="mt-4 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => navigate('/splitit/dashboard')}
-                className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#173b63] px-4 py-3.5 text-sm font-semibold text-white"
-              >
-                Open dashboard
-                <ChevronRight className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/splitit/create')}
-                className="rounded-2xl bg-emerald-50 px-4 py-3.5 text-sm font-semibold text-emerald-700"
-              >
-                Create
-              </button>
-            </div>
-          </div>
+          </button>
         </div>
 
         <div className="px-4 mb-24 pb-4">
@@ -306,7 +255,11 @@ export function Home() {
 
         <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 backdrop-blur rounded-t-3xl px-6 py-4 shadow-2xl z-40">
           <div className="flex items-center justify-around">
-            <button className="flex-1 flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigate('/splitit/notifications')}
+              className="flex-1 flex flex-col items-center gap-1"
+            >
               <HomeIcon className="w-6 h-6 text-[#1e3a5f]" />
               <span className="text-xs text-[#1e3a5f] font-medium">Home</span>
             </button>
