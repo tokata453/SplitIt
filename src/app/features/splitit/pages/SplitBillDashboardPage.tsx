@@ -382,8 +382,6 @@ export function SplitBillDashboardPage() {
     );
   }, [dashboardItems]);
 
-  const ownerReachRate = getPercentage(summary.ownerReachedCount, summary.ownerParticipantCount);
-  const ownerOpenRate = getPercentage(summary.ownerOpenedCount, summary.ownerParticipantCount);
   const summaryTitle = summary.pendingReviewBills
     ? `${summary.pendingReviewBills} ${summary.pendingReviewBills === 1 ? 'bill is' : 'bills are'} waiting for your review`
     : summary.paymentDueBills
@@ -406,20 +404,6 @@ export function SplitBillDashboardPage() {
     ? `You have tracked ${formatCurrency(summary.participantTotalAmount, 'USD')} in bills shared with you. No payment is waiting right now.`
     : 'No participant spending has been tracked yet.';
 
-  const analyticsStatusRows = [
-    { label: 'Needs action', value: summary.needsAction, helper: 'Review, payment, or owner follow-up', tone: 'bg-[#173b63]' },
-    { label: 'In progress', value: summary.inProgressBills, helper: 'Sent and waiting on participants', tone: 'bg-amber-500' },
-    { label: 'Completed', value: summary.completedBills, helper: 'Paid or opened by everyone', tone: 'bg-emerald-500' },
-    { label: 'Rejected', value: summary.rejectedBills, helper: 'Declined participant bills', tone: 'bg-rose-500' },
-  ];
-  const analyticsRoleRows = [
-    { label: 'Created by you', value: summary.ownerBills, helper: `${formatCurrency(summary.ownerTotalAmount, 'USD')} total bill value`, tone: 'bg-[#2d4a6f]' },
-    { label: 'Shared with you', value: summary.participantBills, helper: `${formatCurrency(summary.participantTotalAmount, 'USD')} assigned to you`, tone: 'bg-slate-400' },
-  ];
-  const analyticsTimelineRows = [
-    { label: 'Active', value: summary.activeBills, helper: 'Still needs movement', tone: 'bg-[#173b63]' },
-    { label: 'History', value: summary.historyBills, helper: 'Completed or rejected', tone: 'bg-slate-300' },
-  ];
   const spendingCategoryRows = Object.values(
     dashboardItems.reduce<Record<string, { label: string; amount: number; count: number }>>((accumulator, item) => {
       if (!item.incomingRequest) {
@@ -461,7 +445,22 @@ export function SplitBillDashboardPage() {
     })
     .sort((left, right) => right.analyticsAmount - left.analyticsAmount)
     .slice(0, 5);
-  const recentAnalyticsItems = dashboardItems.slice(0, 5);
+  const maxCategoryAmount = Math.max(...spendingCategoryRows.map((row) => row.amount), 0);
+  const recentTrendRows = [...dashboardItems]
+    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+    .slice(-6)
+    .map((item) => {
+      const amount = item.incomingRequest?.yourAmount ?? item.ownerRequest?.totalAmount ?? 0;
+
+      return {
+        id: item.id,
+        label: new Date(item.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        amount,
+        title: item.title,
+        role: item.role,
+      };
+    });
+  const maxTrendAmount = Math.max(...recentTrendRows.map((row) => row.amount), 0);
 
   const roleOptions: { id: DashboardRoleFilter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -766,49 +765,23 @@ export function SplitBillDashboardPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Money to send</p>
-                <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(summary.readyToPayAmount, 'USD')}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{summary.paymentDueBills} approved {summary.paymentDueBills === 1 ? 'bill' : 'bills'} waiting for payment</p>
-              </div>
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Review amount</p>
-                <p className="mt-2 text-xl font-semibold text-slate-900">{formatCurrency(summary.reviewAmount, 'USD')}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Not payable until you approve the split</p>
-              </div>
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Owner reach</p>
-                <p className="mt-2 text-xl font-semibold text-slate-900">{ownerReachRate}%</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{summary.ownerReachedCount}/{summary.ownerParticipantCount} participants reached</p>
-              </div>
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Open rate</p>
-                <p className="mt-2 text-xl font-semibold text-slate-900">{ownerOpenRate}%</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{summary.ownerOpenedCount}/{summary.ownerParticipantCount} participants opened</p>
-              </div>
-            </div>
-
             <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Where your share goes</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Category spend</p>
                 <p className="text-xs font-medium text-slate-400">{formatCurrency(summary.participantTotalAmount, 'USD')}</p>
               </div>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 flex h-44 items-end gap-3 border-b border-l border-slate-100 px-1 pb-3">
                 {spendingCategoryRows.length ? spendingCategoryRows.map((row) => (
-                  <div key={row.label}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-900">{row.label}</p>
-                        <p className="text-xs text-slate-500">{row.count} {row.count === 1 ? 'bill' : 'bills'} shared with you</p>
-                      </div>
-                      <p className="font-semibold text-slate-900">{formatCurrency(row.amount, 'USD')}</p>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div key={row.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                    <div className="flex h-28 w-full items-end justify-center">
                       <div
-                        className="h-full rounded-full bg-[#173b63]"
-                        style={{ width: `${getPercentage(row.amount, summary.participantTotalAmount)}%` }}
+                        className="w-full max-w-10 rounded-t-2xl bg-[#173b63]"
+                        style={{ height: `${Math.max(getPercentage(row.amount, maxCategoryAmount), 8)}%` }}
                       />
+                    </div>
+                    <div className="min-w-0 text-center">
+                      <p className="truncate text-xs font-semibold text-slate-700">{row.label}</p>
+                      <p className="mt-1 text-[11px] font-medium text-slate-400">{formatCurrency(row.amount, 'USD')}</p>
                     </div>
                   </div>
                 )) : (
@@ -819,73 +792,36 @@ export function SplitBillDashboardPage() {
 
             <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Bill status</p>
-                <p className="text-xs font-medium text-slate-400">{summary.totalBills} total</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Bill amount trend</p>
+                <p className="text-xs font-medium text-slate-400">Recent 6</p>
               </div>
-              <div className="mt-4 space-y-4">
-                {analyticsStatusRows.map((row) => (
-                  <div key={row.label}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-900">{row.label}</p>
-                        <p className="text-xs text-slate-500">{row.helper}</p>
+              <div className="mt-4 h-44 rounded-2xl bg-slate-50 px-3 pb-3 pt-4">
+                <div className="flex h-full items-end gap-2">
+                  {recentTrendRows.map((row) => (
+                    <div key={row.id} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                      <div className="flex h-28 w-full items-end justify-center rounded-xl bg-white/70 px-1">
+                        <div
+                          className={`w-full max-w-8 rounded-t-xl ${row.role === 'owner' ? 'bg-[#2d4a6f]' : 'bg-emerald-500'}`}
+                          style={{ height: `${Math.max(getPercentage(row.amount, maxTrendAmount), 8)}%` }}
+                        />
                       </div>
-                      <p className="font-semibold text-slate-900">{row.value}</p>
+                      <div className="text-center">
+                        <p className="text-[11px] font-semibold text-slate-600">{row.label}</p>
+                        <p className="mt-0.5 text-[10px] text-slate-400">{formatCurrency(row.amount, 'USD')}</p>
+                      </div>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className={`h-full rounded-full ${row.tone}`}
-                        style={{ width: `${getPercentage(row.value, summary.totalBills)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-
-            <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Where bills come from</p>
-              <div className="mt-4 space-y-4">
-                {analyticsRoleRows.map((row) => (
-                  <div key={row.label}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-900">{row.label}</p>
-                        <p className="text-xs text-slate-500">{row.helper}</p>
-                      </div>
-                      <p className="font-semibold text-slate-900">{row.value}</p>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className={`h-full rounded-full ${row.tone}`}
-                        style={{ width: `${getPercentage(row.value, summary.totalBills)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Active vs history</p>
-              <div className="mt-4 space-y-4">
-                {analyticsTimelineRows.map((row) => (
-                  <div key={row.label}>
-                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                      <div>
-                        <p className="font-semibold text-slate-900">{row.label}</p>
-                        <p className="text-xs text-slate-500">{row.helper}</p>
-                      </div>
-                      <p className="font-semibold text-slate-900">{row.value}</p>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className={`h-full rounded-full ${row.tone}`}
-                        style={{ width: `${getPercentage(row.value, summary.totalBills)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+              <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-[#2d4a6f]" />
+                  Owner bill
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  Your share
+                </span>
               </div>
             </div>
 
@@ -915,31 +851,6 @@ export function SplitBillDashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Recent bill details</p>
-              <div className="mt-3 divide-y divide-slate-100">
-                {recentAnalyticsItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedItemId(item.id);
-                      setIsAnalyticsOpen(false);
-                      setIsDetailOpen(true);
-                    }}
-                    className="flex w-full items-center justify-between gap-3 py-3 text-left"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {item.role === 'owner' ? 'Created by you' : `Shared by ${item.incomingRequest?.ownerName ?? 'Owner'}`} · {item.statusLabel}
-                      </p>
-                    </div>
-                    <p className="shrink-0 text-sm font-semibold text-slate-900">{item.amountLabel}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
