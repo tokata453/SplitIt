@@ -1,5 +1,5 @@
-import { splitItCurrentUser, splitItTransactions, splitItUsers } from './mockData';
-import { SplitDraft, SplitItTransaction, SplitItUser, SplitNotification, SplitRequest } from './types';
+import { splitItCurrentUser, splitItIncomingRequests, splitItSentRequests, splitItTransactions, splitItUsers } from './mockData';
+import { SplitDraft, SplitIncomingRequest, SplitItTransaction, SplitItUser, SplitNotification, SplitRequest } from './types';
 import { buildSplitCalculation, getTransactionById, getUsersByIds } from './utils';
 
 const DRAFT_STORAGE_KEY = 'splitit-mvp-draft';
@@ -108,7 +108,7 @@ export function loadDraft(initialDraft: SplitDraft) {
 }
 
 export function getPreviousSplitParticipantIds() {
-  const requests = readJson<SplitRequest[]>(REQUESTS_STORAGE_KEY, []);
+  const requests = readJson<SplitRequest[]>(REQUESTS_STORAGE_KEY, splitItSentRequests);
   return requests[0]?.participantIds ?? [];
 }
 
@@ -122,7 +122,13 @@ export function clearDraft() {
 
 export async function fetchSentRequests() {
   await wait(180);
-  return readJson<SplitRequest[]>(REQUESTS_STORAGE_KEY, []);
+  const storedRequests = readJson<SplitRequest[]>(REQUESTS_STORAGE_KEY, []);
+  return storedRequests.length ? storedRequests : splitItSentRequests;
+}
+
+export async function fetchIncomingRequests() {
+  await wait(180);
+  return splitItIncomingRequests as SplitIncomingRequest[];
 }
 
 export async function sendSplitRequest(draft: SplitDraft) {

@@ -1,6 +1,8 @@
 export type SplitMethod = 'equal' | 'amount' | 'percentage' | 'shares';
 export type NotificationStatus = 'queued' | 'delivered' | 'viewed';
 export type SplitCurrency = 'USD' | 'KHR';
+export type SplitDashboardRole = 'owner' | 'participant';
+export type SplitIncomingStatus = 'pending_review' | 'payment_due' | 'paid' | 'rejected';
 
 export interface SplitItUser {
   id: string;
@@ -63,6 +65,23 @@ export interface SplitRequest {
   note?: string;
   allocations: SplitAllocation[];
   notifications: SplitNotification[];
+}
+
+export interface SplitIncomingRequest {
+  id: string;
+  createdAt: string;
+  ownerName: string;
+  ownerAccountId: string;
+  totalAmount: number;
+  yourAmount: number;
+  currency: SplitCurrency;
+  splitMethod: SplitMethod;
+  participantCount: number;
+  transactionId?: string;
+  receiptFileName?: string;
+  note?: string;
+  status: SplitIncomingStatus;
+  message: string;
 }
 
 export interface SplitDraft {
