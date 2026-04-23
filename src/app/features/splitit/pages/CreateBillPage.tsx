@@ -1,24 +1,23 @@
 import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import {
   Camera,
-  ChevronRight,
   CheckCircle2,
   CircleAlert,
+  BellRing,
   Flashlight,
   FlashlightOff,
-  History,
   ImageUp,
   LoaderCircle,
+  Phone,
   QrCode,
   ScanLine,
   Search,
-  Users,
   X,
 } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
-  fetchParticipantSuggestions,
   fetchTransactionHistory,
+  findParticipantByPhone,
   findParticipantByQrPayload,
   getPreviousSplitParticipantIds,
   searchParticipants,
@@ -27,7 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SplitItLayout } from '../components/SplitItLayout';
 import { useSplitIt } from '../context';
 import { SplitItTransaction, SplitItUser } from '../types';
-import { formatCurrency, formatDate, getSplitMembers, getUsersByIds } from '../utils';
+import { formatCurrency, formatDate, getUsersByIds } from '../utils';
 
 interface DetectedBarcodeShape {
   rawValue?: string;
@@ -90,23 +89,39 @@ function ParticipantRow({
 
 export function CreateBillPage() {
   const navigate = useNavigate();
-  const { draft, calculation, setAmountInput, setCurrency, selectTransaction, toggleParticipant } = useSplitIt();
+  const {
+    draft,
+    calculation,
+    setAmountInput,
+    setCurrency,
+    selectTransaction,
+    toggleParticipant,
+    setReminderSettings,
+    addPhoneInvite,
+    removePhoneInvite,
+  } = useSplitIt();
+  const location = useLocation();
   const [transactions, setTransactions] = useState<SplitItTransaction[]>([]);
-  const [loadingTransactions, setLoadingTransactions] = useState(true);
-  const [suggestions, setSuggestions] = useState<SplitItUser[]>([]);
   const [results, setResults] = useState<SplitItUser[]>([]);
   const [search, setSearch] = useState('');
   const [qrStatus, setQrStatus] = useState('');
-  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
   const [searching, setSearching] = useState(false);
-  const [isTransactionPanelOpen, setIsTransactionPanelOpen] = useState(false);
-  const [isParticipantPanelOpen, setIsParticipantPanelOpen] = useState(false);
   const [isLensOpen, setIsLensOpen] = useState(false);
   const [scanStatus, setScanStatus] = useState('Opening camera...');
   const [scanSupported, setScanSupported] = useState(true);
   const [isUploadingQr, setIsUploadingQr] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
+  const [phoneInviteStatus, setPhoneInviteStatus] = useState('');
+  const splitPayment = (location.state as {
+    splitPayment?: {
+      amount?: number;
+      merchant?: string;
+      reference?: string;
+      transactionId?: string;
+      paidAt?: string;
+    };
+  } | null)?.splitPayment;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const qrUploadInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -114,24 +129,27 @@ export function CreateBillPage() {
   const detectorRef = useRef<BarcodeDetectorShape | null>(null);
   const isScanningRef = useRef(false);
   const isProcessingScanRef = useRef(false);
+  const initializedSplitPaymentRef = useRef(false);
 
   const amountValidationMessage = calculation.totalAmount <= 0 ? `Enter an amount greater than ${formatCurrency(0, draft.currency)}.` : '';
-  const participantValidationMessage = !draft.participantIds.length ? 'Add at least one participant to send this request.' : '';
+  const participantValidationMessage = !draft.participantIds.length && !draft.phoneInvites.length ? 'Add at least one participant or phone invite to send this request.' : '';
   const blockingMessage = amountValidationMessage || participantValidationMessage;
-  const suggestedTransactionId = transactions[0]?.id;
   const previousParticipantIds = getPreviousSplitParticipantIds();
   const selectedParticipants = getUsersByIds(draft.participantIds);
-  const splitMembers = getSplitMembers(draft);
   const selectedTransaction = transactions.find((transaction) => transaction.id === draft.selectedTransactionId);
-  const recentParticipantId = suggestions[0]?.id;
-  const isAmountReady = calculation.totalAmount > 0;
-  const isParticipantReady = draft.participantIds.length > 0;
   const isReadyToReview = !blockingMessage;
-  const visibleSuggestions = Array.from(
-    new Map(
-      [...selectedParticipants, ...suggestions].map((participant) => [participant.id, participant]),
-    ).values(),
-  );
+  const reminderOptions = [
+    { id: 'none', label: 'Off' },
+    { id: 'daily', label: 'Daily' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
+  ] as const;
+  const participantGroups = [
+    { id: 'recent', label: 'Recent group', participantIds: previousParticipantIds.slice(0, 4) },
+    { id: 'dining', label: 'Dining friends', participantIds: ['u-1', 'u-2', 'u-3'] },
+    { id: 'team', label: 'Work team', participantIds: ['u-6', 'u-7', 'u-8'] },
+  ].filter((group) => group.participantIds.length);
+  const inlineParticipantRows = search.trim() ? results : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -140,7 +158,6 @@ export function CreateBillPage() {
       const response = await fetchTransactionHistory();
       if (!cancelled) {
         setTransactions(response);
-        setLoadingTransactions(false);
       }
     };
 
@@ -152,22 +169,21 @@ export function CreateBillPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!splitPayment || initializedSplitPaymentRef.current) {
+      return;
+    }
 
-    const loadSuggestions = async () => {
-      const response = await fetchParticipantSuggestions();
-      if (!cancelled) {
-        setSuggestions(response);
-        setLoadingSuggestions(false);
-      }
-    };
+    initializedSplitPaymentRef.current = true;
 
-    void loadSuggestions();
+    if (splitPayment.transactionId) {
+      selectTransaction(splitPayment.transactionId);
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (typeof splitPayment.amount === 'number') {
+      setAmountInput(splitPayment.amount.toFixed(2));
+    }
+  }, [selectTransaction, setAmountInput, splitPayment]);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,7 +329,6 @@ export function CreateBillPage() {
     }
 
     setIsLensOpen(false);
-    setIsParticipantPanelOpen(true);
     setQrStatus(`${participant.name} added from QR scan.`);
   };
 
@@ -384,9 +399,42 @@ export function CreateBillPage() {
     }
   };
 
-  const selectedParticipantSummary = selectedParticipants.slice(0, 3).map((participant) => participant.name).join(', ');
-  const remainingParticipantCount = Math.max(selectedParticipants.length - 3, 0);
-  const transactionCountLabel = transactions.length ? `from ${transactions.length} recent transactions available` : 'No recent transactions available';
+  const handleAddGroup = (participantIds: string[]) => {
+    participantIds.forEach((participantId) => {
+      if (!draft.participantIds.includes(participantId)) {
+        toggleParticipant(participantId);
+      }
+    });
+  };
+
+  const handlePhoneInvite = async (phoneValue = search) => {
+    const phone = phoneValue.trim();
+
+    if (!phone) {
+      setPhoneInviteStatus('Enter a phone number first.');
+      return;
+    }
+
+    setPhoneInviteStatus('Checking Sathapana Mobile account...');
+    const participant = await findParticipantByPhone(phone);
+
+    if (participant) {
+      if (!draft.participantIds.includes(participant.id)) {
+        toggleParticipant(participant.id);
+      }
+
+      setPhoneInviteStatus(`${participant.name} uses Sathapana Mobile and was added to the split.`);
+      return;
+    }
+
+    addPhoneInvite({
+      id: `phone-invite-${Date.now()}`,
+      phone,
+      message: `Rasmey Sophorn invited you to SplitIt. Download Sathapana Mobile to review and pay your bill share.`,
+      status: 'sms_ready',
+    });
+    setPhoneInviteStatus('No Sathapana Mobile account found. SMS invite will be sent with the app download link.');
+  };
 
   return (
     <SplitItLayout
@@ -402,164 +450,222 @@ export function CreateBillPage() {
         </button>
       }
     >
-      <section className="overflow-hidden rounded-[28px] border border-[#d7e2ee] bg-white shadow-[0_10px_28px_rgba(45,74,111,0.08)]">
-        <div className="border-b border-[#dde6ef] bg-[#fbfcfe] px-5 py-4">
+      <section className="rounded-[24px] border border-slate-200 bg-white/80 p-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2d4a6f]/55">Step 1</p>
-            <h2 className="mt-2 text-lg font-semibold text-slate-900">Enter the bill amount to split</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2d4a6f]/55">Bill setup</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900">
+              {splitPayment ? 'Paid bill ready to split' : 'Amount and source'}
+            </h2>
           </div>
         </div>
 
-        <div className="space-y-4 px-5 py-5">
-          <div className="rounded-[24px] border border-slate-200 bg-[#f7f9fc] p-4">
-            <div className="mb-3 flex items-center justify-between gap-4">
-              <p className="text-sm font-medium text-slate-500">Bill total</p>
-              <div className="flex rounded-2xl bg-[#e7edf4] p-1">
-                {(['USD', 'KHR'] as const).map((currency) => (
-                  <button
-                    key={currency}
-                    type="button"
-                    onClick={() => setCurrency(currency)}
-                    className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                      draft.currency === currency ? 'bg-[#2d4a6f] text-white shadow-sm' : 'text-[#6a7f97]'
-                    }`}
-                  >
-                    {currency}
-                  </button>
-                ))}
-              </div>
+        <div className="mt-3 rounded-2xl bg-slate-50 px-4 py-3">
+          <div className="flex items-end gap-2 border-b border-slate-200">
+            <div className="pb-1 text-2xl font-semibold tracking-[-0.05em] text-slate-400">
+              {draft.currency === 'USD' ? '$' : '៛'}
             </div>
-
-            <div className="flex items-end gap-2 border-b border-slate-200">
-              <div className="pb-1 text-4xl font-semibold tracking-[-0.05em] text-slate-500">
-                {draft.currency === 'USD' ? '$' : '៛'}
-              </div>
-              <input
-                id="bill-amount"
-                inputMode="decimal"
-                value={draft.amountInput}
-                onChange={(event) => setAmountInput(event.target.value)}
-                placeholder="0.00"
-                className="h-16 w-full bg-transparent px-0 text-5xl font-semibold tracking-[-0.05em] text-slate-700 outline-none"
-              />
-            </div>
+            <input
+              id="bill-amount"
+              inputMode="decimal"
+              value={draft.amountInput}
+              onChange={(event) => setAmountInput(event.target.value)}
+              placeholder="0.00"
+              className="h-12 w-full bg-transparent px-0 text-3xl font-semibold tracking-[-0.05em] text-slate-800 outline-none"
+            />
           </div>
+        </div>
 
-          <div className="rounded-[24px] border border-slate-200 bg-[#f7f9fc] px-4 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${selectedTransaction ? 'bg-[#e7edf4] text-[#2d4a6f]' : 'bg-slate-100 text-slate-500'}`}>
-                  <History className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-slate-900">{selectedTransaction ? selectedTransaction.merchant : 'Select Amount'}</p>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${selectedTransaction ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                      {selectedTransaction ? 'Linked' : 'Optional'}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {selectedTransaction
-                      ? `${formatDate(selectedTransaction.postedAt)} • ${selectedTransaction.category}`
-                      : transactionCountLabel}
-                  </p>
-                </div>
+        {splitPayment ? (
+          <div className="mt-3 rounded-2xl bg-emerald-50 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white text-emerald-700">
+                <CheckCircle2 className="h-5 w-5" />
               </div>
-              {selectedTransaction ? (
-                <p className="text-right text-base font-semibold text-slate-900">
-                  {formatCurrency(selectedTransaction.amount, selectedTransaction.currency)}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-emerald-900">{splitPayment.merchant ?? 'QR payment'}</p>
+                <p className="mt-1 text-xs font-medium text-emerald-700">
+                  Paid ref {splitPayment.reference ?? 'Payment reference'}
                 </p>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setIsTransactionPanelOpen(true)}
-                className="inline-flex flex-1 items-center justify-between rounded-2xl bg-[#e7edf4] px-4 py-3 text-sm font-medium text-[#2d4a6f] transition hover:bg-[#dde6ef]"
-              >
-                <span>{selectedTransaction ? 'Change transaction' : 'Select recent transaction'}</span>
-                <ChevronRight className="h-4 w-4 text-slate-400" />
-              </button>
-              {selectedTransaction ? (
-                <button
-                  type="button"
-                  onClick={() => selectTransaction(undefined)}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-                >
-                  Remove
-                </button>
-              ) : null}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <label className="mt-4 block">
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Bill reference</span>
+            <select
+              value={draft.selectedTransactionId ?? ''}
+              onChange={(event) => selectTransaction(event.target.value || undefined)}
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-[#f7f9fc] px-4 py-3 text-sm font-semibold text-slate-800 outline-none"
+            >
+              <option value="">Manual bill</option>
+              {transactions.map((transaction) => (
+                <option key={transaction.id} value={transaction.id}>
+                  {transaction.merchant} · {formatCurrency(transaction.amount, transaction.currency)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {!splitPayment && selectedTransaction ? (
+          <p className="mt-2 text-xs text-slate-500">
+            Linked to {formatDate(selectedTransaction.postedAt)} · {selectedTransaction.category}
+          </p>
+        ) : null}
       </section>
 
-      <Dialog open={isTransactionPanelOpen} onOpenChange={setIsTransactionPanelOpen}>
-        <DialogContent className="max-h-[88dvh] max-w-md overflow-hidden rounded-[28px] border-0 bg-[#f7f8fa] p-0">
-          <DialogHeader className="border-b border-slate-200 bg-white px-5 py-4 text-left">
-            <DialogTitle className="text-xl text-slate-900">Transaction history</DialogTitle>
-            <DialogDescription className="text-sm text-slate-500">Choose a payment to fill the amount.</DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[calc(88dvh-5.75rem)] space-y-3 overflow-y-auto px-4 py-4">
-            {loadingTransactions ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-20 animate-pulse rounded-2xl bg-slate-200" />
-                ))}
-              </div>
-            ) : transactions.length ? (
-              transactions.map((transaction) => {
-                const isSelected = draft.selectedTransactionId === transaction.id;
-                const isSuggested = suggestedTransactionId === transaction.id;
-
-                return (
-                  <button
-                    key={transaction.id}
-                    type="button"
-                    onClick={() => {
-                      selectTransaction(isSelected ? undefined : transaction.id);
-                      setIsTransactionPanelOpen(false);
-                    }}
-                    className={`w-full rounded-2xl border px-4 py-4 text-left ${
-                      isSelected
-                        ? 'border-[#173b63] bg-[#edf3f8]'
-                        : isSuggested
-                          ? 'border-[#c8d6e5] bg-[#f7fafc]'
-                          : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-slate-900">{transaction.merchant}</p>
-                          {isSuggested ? (
-                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
-                              Suggested
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm text-slate-500">{formatDate(transaction.postedAt)}</p>
-                        <p className="mt-2 text-xs text-slate-400">
-                          Suggested participants: {transaction.participantsHint.length || 'None'}
-                        </p>
-                      </div>
-                      <p className="font-semibold text-slate-900">{formatCurrency(transaction.amount, transaction.currency)}</p>
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center">
-                <History className="mx-auto h-8 w-8 text-slate-300" />
-                <p className="mt-3 font-medium text-slate-900">No recent transactions</p>
-                <p className="mt-1 text-sm text-slate-500">Manual amount entry is still available on the page.</p>
-              </div>
-            )}
+      <section className="rounded-[28px] border border-[#d7e2ee] bg-white p-4 shadow-[0_10px_28px_rgba(45,74,111,0.08)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2d4a6f]/55">Participants</p>
+            <h2 className="mt-1 text-lg font-semibold text-slate-900">People to split with</h2>
           </div>
-        </DialogContent>
-      </Dialog>
+          <span className="rounded-full bg-[#edf3f8] px-3 py-1 text-sm font-semibold text-[#173b63]">
+            {selectedParticipants.length + draft.phoneInvites.length}
+          </span>
+        </div>
+
+        {(selectedParticipants.length || draft.phoneInvites.length) ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {selectedParticipants.map((participant) => (
+              <button
+                key={participant.id}
+                type="button"
+                onClick={() => toggleParticipant(participant.id)}
+                className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"
+              >
+                {participant.name} ×
+              </button>
+            ))}
+            {draft.phoneInvites.map((invite) => (
+              <button
+                key={invite.id}
+                type="button"
+                onClick={() => removePhoneInvite(invite.id)}
+                className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800"
+              >
+                <Phone className="h-3.5 w-3.5" />
+                {invite.phone} ×
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {participantGroups.length ? (
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Quick add</p>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {participantGroups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => handleAddGroup(group.participantIds)}
+                  className="shrink-0 rounded-2xl bg-[#edf3f8] px-4 py-3 text-sm font-semibold text-[#173b63]"
+                >
+                  {group.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 flex items-center gap-2 rounded-[22px] border border-slate-200 bg-[#f7f9fc] px-3 py-2">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setQrStatus('');
+            }}
+            placeholder="Search name, account, or phone"
+            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+          />
+          <button
+            type="button"
+            onClick={() => setIsLensOpen(true)}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-white text-slate-500"
+            aria-label="Use QR add"
+          >
+            <QrCode className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {searching ? (
+            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">Searching...</div>
+          ) : inlineParticipantRows.length ? (
+            inlineParticipantRows.map((participant) => (
+              <ParticipantRow
+                key={participant.id}
+                participant={participant}
+                isSelected={draft.participantIds.includes(participant.id)}
+                onToggle={() => toggleParticipant(participant.id)}
+                statusLabel={
+                  previousParticipantIds.includes(participant.id)
+                    ? 'Previous'
+                    : undefined
+                }
+              />
+            ))
+          ) : search ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500">
+              <p>No Sathapana Mobile account found for this search.</p>
+              <button
+                type="button"
+                onClick={() => void handlePhoneInvite()}
+                className="mt-3 rounded-xl bg-[#173b63] px-3 py-2 text-sm font-semibold text-white"
+              >
+                Send SMS invite
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        {phoneInviteStatus ? <p className="mt-3 text-sm text-slate-500">{phoneInviteStatus}</p> : null}
+        {qrStatus ? <p className="mt-3 text-sm text-slate-500">{qrStatus}</p> : null}
+      </section>
+
+      <section className="rounded-[28px] border border-[#d7e2ee] bg-white p-4 shadow-[0_10px_28px_rgba(45,74,111,0.08)]">
+        <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#edf3f8] text-[#173b63]">
+              <BellRing className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-900">Reminder</p>
+              <p className="mt-1 text-sm text-slate-500">Default follow-up for unpaid participants.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-4 gap-2 rounded-2xl bg-slate-50 p-1">
+          {reminderOptions.map((option) => {
+            const isActive = option.id === 'none'
+              ? !draft.reminderSettings.enabled
+              : draft.reminderSettings.enabled && draft.reminderSettings.frequency === option.id;
+
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  setReminderSettings(
+                    option.id === 'none'
+                      ? { enabled: false, frequency: draft.reminderSettings.frequency }
+                      : { enabled: true, frequency: option.id },
+                  );
+                }}
+                className={`rounded-xl px-2 py-2.5 text-sm font-semibold transition ${
+                  isActive ? 'bg-white text-[#173b63] shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <Dialog open={isLensOpen} onOpenChange={setIsLensOpen}>
         <DialogContent className="h-[100dvh] max-w-md overflow-hidden rounded-none border-0 bg-black p-0 text-white shadow-none [&>button:last-child]:hidden">
@@ -640,171 +746,6 @@ export function CreateBillPage() {
                 className="hidden"
               />
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <section className="overflow-hidden rounded-[28px] border border-[#d7e2ee] bg-white shadow-[0_10px_28px_rgba(45,74,111,0.08)]">
-        <div className="border-b border-[#dde6ef] bg-[#fbfcfe] px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2d4a6f]/55">Step 2</p>
-              <h2 className="mt-2 text-lg font-semibold text-slate-900">Who is in this split</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {draft.includeOwner
-                  ? 'The bill is split between you and the selected participants.'
-                  : 'The bill is split only among the selected participants.'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsParticipantPanelOpen(true)}
-              className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              <span>{draft.participantIds.length ? 'Manage participants' : 'Add participants'}</span>
-              <ChevronRight className="h-4 w-4 text-slate-400" />
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-4 px-5 py-5">
-          <div className="rounded-[24px] border border-slate-200 bg-[#f7f9fc] px-4 py-4">
-            {selectedParticipants.length ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e7edf4] text-[#2d4a6f]">
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {splitMembers.length} {splitMembers.length === 1 ? 'person' : 'people'} in this split
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {draft.includeOwner
-                          ? `You + ${selectedParticipants.length} ${selectedParticipants.length === 1 ? 'participant' : 'participants'}`
-                          : `${selectedParticipants.length} ${selectedParticipants.length === 1 ? 'participant' : 'participants'} selected`}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {draft.includeOwner ? (
-                    <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf2fb] px-3 py-2 text-sm text-[#173b63]">
-                      <span className="flex h-7 min-w-7 items-center justify-center rounded-full bg-white px-2 text-xs font-semibold text-[#173b63]">
-                        You
-                      </span>
-                      <span className="font-medium">Bill owner</span>
-                    </div>
-                  ) : null}
-                  {selectedParticipants.slice(0, 4).map((participant) => (
-                    <div key={participant.id} className="inline-flex items-center gap-2 rounded-full bg-[#f6f9fc] px-3 py-2 text-sm text-slate-700">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-semibold text-slate-600">
-                        {participant.initials}
-                      </span>
-                      <span className="font-medium">{participant.name}</span>
-                    </div>
-                  ))}
-                  {selectedParticipants.length > 4 ? (
-                    <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-500">
-                      +{selectedParticipants.length - 4} more
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-semibold text-slate-900">No participants added yet</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {draft.includeOwner
-                      ? 'You are already included. Add at least one participant to send the request.'
-                      : 'Add at least one participant to start the split.'}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {qrStatus ? <p className="text-sm text-slate-500">{qrStatus}</p> : null}
-        </div>
-      </section>
-
-      <Dialog open={isParticipantPanelOpen} onOpenChange={setIsParticipantPanelOpen}>
-        <DialogContent className="max-h-[88dvh] max-w-md overflow-hidden rounded-[28px] border-0 bg-[#f7f8fa] p-0">
-          <DialogHeader className="border-b border-slate-200 bg-white px-5 py-4 text-left">
-            <DialogTitle className="text-xl text-slate-900">Participants</DialogTitle>
-            <DialogDescription className="text-sm text-slate-500">
-              Search by name or account ID, or use QR scan to add someone quickly.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[calc(88dvh-5.75rem)] overflow-y-auto px-4 py-4">
-            <div className="flex items-center gap-2 rounded-[22px] border border-slate-200 bg-white px-3 py-2">
-              <Search className="h-4 w-4 text-slate-400" />
-              <input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setQrStatus('');
-                }}
-                placeholder="Search name or account ID"
-                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-              />
-              <button
-                type="button"
-                onClick={() => setIsLensOpen(true)}
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-500"
-                aria-label="Use QR add"
-              >
-                <QrCode className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {searching ? (
-                <div className="rounded-[22px] bg-slate-100 px-4 py-5 text-sm text-slate-500">Searching participants...</div>
-              ) : results.length ? (
-                results.map((participant) => (
-                  <ParticipantRow
-                    key={participant.id}
-                    participant={participant}
-                    isSelected={draft.participantIds.includes(participant.id)}
-                    onToggle={() => toggleParticipant(participant.id)}
-                  />
-                ))
-              ) : search ? (
-                <div className="rounded-[22px] border border-dashed border-slate-300 px-4 py-5 text-sm text-slate-500">
-                  No matches found. Try account IDs like <span className="font-medium text-slate-700">AC-884-1001</span>.
-                </div>
-              ) : loadingSuggestions ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="h-16 animate-pulse rounded-[22px] bg-slate-200" />
-                ))
-              ) : (
-                visibleSuggestions.map((participant) => (
-                  <ParticipantRow
-                    key={participant.id}
-                    participant={participant}
-                    isSelected={draft.participantIds.includes(participant.id)}
-                    onToggle={() => toggleParticipant(participant.id)}
-                    statusLabel={
-                      previousParticipantIds.includes(participant.id) && draft.participantIds.includes(participant.id)
-                        ? 'Previous'
-                        : !search && participant.id === recentParticipantId
-                          ? 'Recent'
-                          : undefined
-                    }
-                  />
-                ))
-              )}
-            </div>
-
-            {qrStatus ? <p className="mt-3 text-sm text-slate-500">{qrStatus}</p> : null}
           </div>
         </DialogContent>
       </Dialog>

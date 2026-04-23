@@ -75,6 +75,13 @@ export async function findParticipantByQrPayload(payload: string) {
   return splitItUsers.find((user) => user.accountId.toLowerCase() === normalized) ?? null;
 }
 
+export async function findParticipantByPhone(phone: string) {
+  await wait(220);
+
+  const normalized = phone.replace(/\s/g, '');
+  return splitItUsers.find((user) => user.phone.replace(/\s/g, '') === normalized) ?? null;
+}
+
 export async function saveDraft(draft: SplitDraft) {
   await wait(50);
   writeJson(DRAFT_STORAGE_KEY, draft);
@@ -99,6 +106,9 @@ function normalizeDraft(draft: Partial<SplitDraft> | null | undefined, initialDr
       ...(draft?.unitShares ?? {}),
     },
     receiptItems: draft?.receiptItems ?? initialDraft.receiptItems,
+    reminderSettings: draft?.reminderSettings ?? initialDraft.reminderSettings,
+    instantSplitAfterPayment: draft?.instantSplitAfterPayment ?? initialDraft.instantSplitAfterPayment,
+    phoneInvites: draft?.phoneInvites ?? initialDraft.phoneInvites,
   };
 }
 
@@ -173,6 +183,12 @@ export async function sendSplitRequest(draft: SplitDraft) {
     receiptFileName: draft.receiptFileName,
     receiptItems: draft.receiptItems.length ? draft.receiptItems : undefined,
     note: draft.note.trim() || undefined,
+    reminderSettings: draft.reminderSettings,
+    instantSplitAfterPayment: draft.instantSplitAfterPayment,
+    phoneInvites: draft.phoneInvites.map((invite) => ({
+      ...invite,
+      status: 'sms_sent',
+    })),
     allocations: calculation.allocations,
     notifications,
   };

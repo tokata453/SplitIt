@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, Eye, FileText, Image as ImageIcon } from 'lucide-react';
+import { BellRing, ChevronRight, Eye, FileText, Image as ImageIcon, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { sendSplitRequest } from '../api';
 import { SectionCard } from '../components/SectionCard';
@@ -39,7 +39,7 @@ export function ReviewSummaryPage() {
   return (
     <SplitItLayout
       title="Review request"
-      subtitle="A simple final check before SplitIt sends the request to each participant."
+      subtitle="A final check before sending the request to each participant."
       footer={
         <button
           onClick={handleSend}
@@ -78,6 +78,8 @@ export function ReviewSummaryPage() {
           </div>
         </div>
       </SectionCard>
+
+  
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">

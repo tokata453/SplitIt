@@ -225,8 +225,8 @@ export function validateDraft(draft: SplitDraft) {
     return `Enter an amount greater than ${formatCurrency(0, draft.currency)}.`;
   }
 
-  if (!participants.length) {
-    return 'Add at least one participant to send this split request.';
+  if (!participants.length && !draft.phoneInvites.length) {
+    return 'Add at least one participant or phone invite to send this split request.';
   }
 
   if (draft.splitMethod === 'amount' && !calculation.isValid) {

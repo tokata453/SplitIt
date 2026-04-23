@@ -228,6 +228,12 @@ export const splitItDefaultDraft: SplitDraft = {
   unitShares: {},
   receiptItems: [],
   note: '',
+  reminderSettings: {
+    enabled: true,
+    frequency: 'daily',
+  },
+  instantSplitAfterPayment: true,
+  phoneInvites: [],
 };
 
 export const splitItSentRequests: SplitRequest[] = [
@@ -242,6 +248,12 @@ export const splitItSentRequests: SplitRequest[] = [
     transactionId: 'txn-1004',
     receiptFileName: 'malis-dinner-receipt.jpg',
     note: 'Dinner split from last night. Please check your share.',
+    reminderSettings: {
+      enabled: true,
+      frequency: 'daily',
+    },
+    instantSplitAfterPayment: true,
+    phoneInvites: [],
     allocations: [
       { participantId: 'u-1', amount: 24 },
       { participantId: 'u-2', amount: 24 },
@@ -309,6 +321,12 @@ export const splitItSentRequests: SplitRequest[] = [
     participantIds: ['u-2', 'u-4'],
     transactionId: 'txn-1005',
     receiptFileName: 'aeon-food-court.jpg',
+    reminderSettings: {
+      enabled: true,
+      frequency: 'weekly',
+    },
+    instantSplitAfterPayment: false,
+    phoneInvites: [],
     allocations: [
       { participantId: 'u-2', amount: 20 },
       { participantId: 'u-4', amount: 24.5 },
@@ -349,6 +367,19 @@ export const splitItSentRequests: SplitRequest[] = [
     splitMethod: 'equal',
     participantIds: ['u-4'],
     transactionId: 'txn-1008',
+    reminderSettings: {
+      enabled: true,
+      frequency: 'daily',
+    },
+    instantSplitAfterPayment: true,
+    phoneInvites: [
+      {
+        id: 'invite-1003-1',
+        phone: '+855 12 888 431',
+        message: 'Rasmey Sophorn invited you to SplitIt on Sathapana Mobile.',
+        status: 'sms_sent',
+      },
+    ],
     allocations: [
       { participantId: 'u-4', amount: 18.2 },
     ],

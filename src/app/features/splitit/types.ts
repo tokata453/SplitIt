@@ -3,6 +3,19 @@ export type NotificationStatus = 'queued' | 'delivered' | 'viewed';
 export type SplitCurrency = 'USD' | 'KHR';
 export type SplitDashboardRole = 'owner' | 'participant';
 export type SplitIncomingStatus = 'pending_review' | 'payment_due' | 'paid' | 'rejected';
+export type SplitReminderFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
+
+export interface SplitReminderSettings {
+  enabled: boolean;
+  frequency: SplitReminderFrequency;
+}
+
+export interface SplitPhoneInvite {
+  id: string;
+  phone: string;
+  message: string;
+  status: 'sms_ready' | 'sms_sent';
+}
 
 export interface SplitItUser {
   id: string;
@@ -63,6 +76,9 @@ export interface SplitRequest {
   receiptFileName?: string;
   receiptItems?: SplitReceiptItem[];
   note?: string;
+  reminderSettings?: SplitReminderSettings;
+  instantSplitAfterPayment?: boolean;
+  phoneInvites?: SplitPhoneInvite[];
   allocations: SplitAllocation[];
   notifications: SplitNotification[];
 }
@@ -82,6 +98,7 @@ export interface SplitIncomingRequest {
   note?: string;
   status: SplitIncomingStatus;
   message: string;
+  reminderSettings?: SplitReminderSettings;
 }
 
 export interface SplitDraft {
@@ -97,6 +114,9 @@ export interface SplitDraft {
   receiptFileName?: string;
   receiptItems: SplitReceiptItem[];
   note: string;
+  reminderSettings: SplitReminderSettings;
+  instantSplitAfterPayment: boolean;
+  phoneInvites: SplitPhoneInvite[];
 }
 
 export interface SplitCalculation {

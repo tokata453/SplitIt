@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Bell, ChevronRight, Home as HomeIcon, Users, CreditCard, Grid2x2, Split, Wallet, ScanLine, Smartphone, ReceiptText, ScrollText, ArrowUpRight, Star, AlertTriangle, X } from 'lucide-react';
+import { Bell, ChevronRight, Home as HomeIcon, Users, CreditCard, Grid2x2, Split, Wallet, ScanLine, Smartphone, ReceiptText, ScrollText, ArrowUpRight, Star, X } from 'lucide-react';
 import { fetchHomeSummary, onGroupsChanged } from '../utils/splitItApi';
 import { getTotalOwed, getUnpaidCount } from '../utils/splitItData';
 import { fetchIncomingRequests, fetchSentRequests } from '../features/splitit/api';
@@ -103,43 +103,60 @@ export function Home() {
     navigate('/splitit/dashboard');
   };
 
+  const handleScanToPay = () => {
+    navigate('/splitit/payment-success', {
+      state: {
+        amount: 96,
+        merchant: 'Malis Restaurant',
+        reference: 'QR-20260423-0008',
+        transactionId: 'txn-1004',
+        paidAt: new Date().toISOString(),
+      },
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1e3a5f] via-[#2d4a6f] to-[#1e3a5f]">
       {showSplitItAlert && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 w-full max-w-md px-4 z-50 pointer-events-none">
-          <div className="w-full bg-red-50 border border-red-200 rounded-2xl shadow-2xl overflow-hidden pointer-events-auto">
-            <div className="px-4 py-3 flex items-center gap-3">
-              <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
+          <div className="w-full overflow-hidden rounded-[24px] border border-white/70 bg-white/95 shadow-2xl backdrop-blur-xl pointer-events-auto">
+            <div className="px-4 py-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-[#173b63] text-white">
+                  <Split className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-900">SplitIt reminder</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Now</span>
+                  </div>
+                  <p className="mt-1 text-sm leading-5 text-slate-600">
+                    {unpaidCount} unpaid {unpaidCount === 1 ? 'bill' : 'bills'} waiting. You owe ${totalOwed.toFixed(2)}.
+                  </p>
+                </div>
+                <button
+                  onClick={handleDismissAlert}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                  aria-label="Dismiss SplitIt reminder"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-red-900">
-                  {unpaidCount} unpaid {unpaidCount === 1 ? 'bill' : 'bills'} • ${totalOwed.toFixed(2)}
-                </p>
-                <p className="text-xs text-red-700 truncate">
-                  Review your pending SplitIt payments.
-                </p>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={handleOpenSplitIt}
+                  className="flex-1 rounded-2xl bg-[#173b63] py-3 text-sm font-semibold text-white"
+                >
+                  Review bills
+                </button>
+                <button
+                  onClick={handleDismissAlert}
+                  className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600"
+                >
+                  Later
+                </button>
               </div>
-              <button
-                onClick={handleDismissAlert}
-                className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-700 hover:bg-red-200 transition-colors flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="px-4 pb-3 flex gap-2">
-              <button
-                onClick={handleDismissAlert}
-                className="flex-1 py-2 bg-red-100 text-red-800 rounded-xl text-sm font-medium hover:bg-red-200 transition-colors"
-              >
-                Dismiss
-              </button>
-              <button
-                onClick={handleOpenSplitIt}
-                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors"
-              >
-                View SplitIt
-              </button>
             </div>
           </div>
         </div>
@@ -297,7 +314,12 @@ export function Home() {
               <Wallet className="w-6 h-6 text-gray-400" />
               <span className="text-xs text-gray-400">Accounts</span>
             </button>
-            <button className="flex-1 flex flex-col items-center -mt-8">
+            <button
+              type="button"
+              onClick={handleScanToPay}
+              className="flex-1 flex flex-col items-center -mt-8"
+              aria-label="Scan QR to pay"
+            >
               <div className="w-14 h-14 bg-[#1e3a5f] rounded-full flex items-center justify-center shadow-lg ring-4 ring-white">
                 <ScanLine className="w-7 h-7 text-white" />
               </div>

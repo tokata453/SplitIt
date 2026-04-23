@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import { clearDraft, getPreviousSplitParticipantIds, loadDraft, saveDraft } from './api';
 import { splitItDefaultDraft } from './mockData';
-import { SplitDraft, SplitReceiptItem, SplitRequest } from './types';
+import { SplitDraft, SplitPhoneInvite, SplitReceiptItem, SplitReminderSettings, SplitRequest } from './types';
 import { buildSplitCalculation, getTransactionById } from './utils';
 
 interface SplitItContextValue {
@@ -26,6 +26,10 @@ interface SplitItContextValue {
   setReceiptItems: (items: SplitReceiptItem[]) => void;
   toggleReceiptItemParticipant: (itemId: string, participantId: string) => void;
   setNote: (note: string) => void;
+  setReminderSettings: (settings: SplitReminderSettings) => void;
+  setInstantSplitAfterPayment: (enabled: boolean) => void;
+  addPhoneInvite: (invite: SplitPhoneInvite) => void;
+  removePhoneInvite: (inviteId: string) => void;
   setLastSentRequest: (request: SplitRequest | null) => void;
   resetDraft: () => void;
 }
@@ -253,6 +257,33 @@ export function SplitItProvider({ children }: { children: ReactNode }) {
       setDraft((currentDraft) => ({
         ...currentDraft,
         note,
+      }));
+    },
+    setReminderSettings: (settings) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        reminderSettings: settings,
+      }));
+    },
+    setInstantSplitAfterPayment: (enabled) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        instantSplitAfterPayment: enabled,
+      }));
+    },
+    addPhoneInvite: (invite) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        phoneInvites: [
+          ...currentDraft.phoneInvites.filter((currentInvite) => currentInvite.phone !== invite.phone),
+          invite,
+        ],
+      }));
+    },
+    removePhoneInvite: (inviteId) => {
+      setDraft((currentDraft) => ({
+        ...currentDraft,
+        phoneInvites: currentDraft.phoneInvites.filter((invite) => invite.id !== inviteId),
       }));
     },
     setLastSentRequest,
