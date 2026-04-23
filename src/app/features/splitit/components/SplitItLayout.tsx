@@ -17,7 +17,7 @@ export function SplitItLayout({ title, subtitle, children, footer, backTo = '/sp
   const isLight = variant === 'light';
 
   const handleBack = () => {
-    if (location.pathname === '/splitit/create') {
+    if (location.pathname === '/splitit/create' || location.pathname === '/splitit/dashboard') {
       navigate('/');
       return;
     }

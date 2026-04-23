@@ -166,6 +166,7 @@ export async function sendSplitRequest(draft: SplitDraft) {
         ? `${splitItCurrentUser.name} requested your share for ${transaction.merchant}.`
         : `${splitItCurrentUser.name} sent you a SplitIt request.`,
       status: index === 0 ? 'viewed' : index === 1 ? 'delivered' : 'queued',
+      paymentStatus: 'pending',
       channel: index % 2 === 0 ? 'push' : 'in_app',
       sentAt: now,
     };

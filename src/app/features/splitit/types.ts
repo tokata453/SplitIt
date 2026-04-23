@@ -4,6 +4,7 @@ export type SplitCurrency = 'USD' | 'KHR';
 export type SplitDashboardRole = 'owner' | 'participant';
 export type SplitIncomingStatus = 'pending_review' | 'payment_due' | 'paid' | 'rejected';
 export type SplitReminderFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
+export type SplitParticipantPaymentStatus = 'paid' | 'pending';
 
 export interface SplitReminderSettings {
   enabled: boolean;
@@ -60,6 +61,8 @@ export interface SplitNotification {
   currency: SplitCurrency;
   message: string;
   status: NotificationStatus;
+  paymentStatus?: SplitParticipantPaymentStatus;
+  paidAt?: string;
   channel: 'push' | 'in_app';
   sentAt: string;
 }
@@ -99,6 +102,16 @@ export interface SplitIncomingRequest {
   status: SplitIncomingStatus;
   message: string;
   reminderSettings?: SplitReminderSettings;
+  participants?: SplitIncomingParticipant[];
+}
+
+export interface SplitIncomingParticipant {
+  id: string;
+  name: string;
+  accountId: string;
+  amount: number;
+  status: SplitParticipantPaymentStatus;
+  isYou?: boolean;
 }
 
 export interface SplitDraft {

@@ -331,6 +331,9 @@ export function SplitBillDashboardPage() {
           accumulator.ownerParticipantCount += progress.total;
           accumulator.ownerReachedCount += progress.reached;
           accumulator.ownerOpenedCount += progress.viewed;
+          accumulator.amountToReceive += item.ownerRequest.notifications
+            .filter((notification) => notification.status !== 'viewed')
+            .reduce((total, notification) => total + notification.amount, 0);
         }
 
         if (item.incomingRequest) {
@@ -374,6 +377,7 @@ export function SplitBillDashboardPage() {
         ownerOpenedCount: 0,
         ownerTotalAmount: 0,
         participantTotalAmount: 0,
+        amountToReceive: 0,
         readyToPayAmount: 0,
         reviewAmount: 0,
         paidAmount: 0,
@@ -382,20 +386,12 @@ export function SplitBillDashboardPage() {
     );
   }, [dashboardItems]);
 
-  const summaryTitle = summary.pendingReviewBills
-    ? `${summary.pendingReviewBills} ${summary.pendingReviewBills === 1 ? 'bill is' : 'bills are'} waiting for your review`
-    : summary.paymentDueBills
-    ? `${formatCurrency(summary.readyToPayAmount, 'USD')} is ready to send`
-    : summary.activeBills
-    ? `${summary.activeBills} active ${summary.activeBills === 1 ? 'bill' : 'bills'} in progress`
-    : 'Your split bills are caught up';
-  const summaryDescription = summary.pendingReviewBills
-    ? 'Review these before money moves. You can approve the amount, pay it later, or reject anything that looks wrong.'
-    : summary.paymentDueBills
-    ? 'Money to send is the approved amount from participant bills that is waiting for payment.'
-    : summary.activeBills
-    ? 'Active bills are still moving. Track who has opened your requests and what you may still need to pay.'
-    : 'No bill needs action right now. Completed and rejected bills stay in history for reference.';
+  const amountYouOwe = summary.readyToPayAmount + summary.reviewAmount;
+  const reviewWaitingText = summary.pendingReviewBills
+    ? `${summary.pendingReviewBills} ${summary.pendingReviewBills === 1 ? 'bill is' : 'bills are'} waiting for your review.`
+    : 'No bills are waiting for your review.';
+  const summaryTitle = reviewWaitingText;
+  const summaryDescription = reviewWaitingText;
   const financialControlDescription = summary.readyToPayAmount > 0
     ? `${formatCurrency(summary.readyToPayAmount, 'USD')} is approved and ready to leave your account. Another ${formatCurrency(summary.reviewAmount, 'USD')} is still waiting for your decision.`
     : summary.reviewAmount > 0
@@ -488,25 +484,7 @@ export function SplitBillDashboardPage() {
     <SplitItLayout
       title="Split bill dashboard"
       subtitle="Track bills you created and bills shared with you in one place."
-      footer={
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => navigate('/splitit/create')}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-900"
-          >
-            New split bill
-          </button>
-          <button
-            onClick={() => {
-              resetDraft();
-              navigate('/');
-            }}
-            className="rounded-2xl bg-[#2d4a6f] px-4 py-4 text-center text-sm font-semibold text-white"
-          >
-            Back home
-          </button>
-        </div>
-      }
+      footer=""
     >
       {loading ? (
         <SectionCard title="Loading dashboard">
@@ -526,12 +504,7 @@ export function SplitBillDashboardPage() {
                     <Clock3 className="h-4 w-4" />
                     <p className="text-xs font-semibold uppercase tracking-[0.16em]">Today</p>
                   </div>
-                  <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-slate-900">
-                    {summaryTitle}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    {summaryDescription}
-                  </p>
+                  <p className="mt-3 text-sm font-medium text-slate-500">{reviewWaitingText}</p>
                 </div>
                 <button
                   type="button"
@@ -543,18 +516,18 @@ export function SplitBillDashboardPage() {
                 </button>
               </div>
 
-              <div className="mt-5 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Money to send</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">{formatCurrency(summary.readyToPayAmount, 'USD')}</p>
+              <div className="mt-5 grid grid-cols-2 gap-0 overflow-hidden rounded-[24px] bg-slate-50">
+                <div className="px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">To receive</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
+                    {formatCurrency(summary.amountToReceive, 'USD')}
+                  </p>
                 </div>
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Need decision</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">{summary.pendingReviewBills}</p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Active bills</p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">{summary.activeBills}</p>
+                <div className="border-l border-slate-200 px-4 py-4 text-right">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">You owe</p>
+                  <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-slate-900">
+                    {formatCurrency(amountYouOwe, 'USD')}
+                  </p>
                 </div>
               </div>
             </div>
@@ -657,10 +630,7 @@ export function SplitBillDashboardPage() {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedItemId(item.id);
-                    setIsDetailOpen(true);
-                  }}
+                  onClick={() => navigate(`/splitit/dashboard/${item.role}/${item.id}`)}
                   className="w-full rounded-[22px] border border-slate-200 bg-white px-4 py-4 text-left transition hover:border-slate-300"
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -833,9 +803,8 @@ export function SplitBillDashboardPage() {
                     key={item.id}
                     type="button"
                     onClick={() => {
-                      setSelectedItemId(item.id);
                       setIsAnalyticsOpen(false);
-                      setIsDetailOpen(true);
+                      navigate(`/splitit/dashboard/${item.role}/${item.id}`);
                     }}
                     className="flex w-full items-center justify-between gap-3 py-3 text-left"
                   >
