@@ -35,6 +35,17 @@ function writeJson<T>(key: string, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
+function initializeSplitBillMockData() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  // Refreshing the app should always restore the demo bill dataset.
+  writeJson(REQUESTS_STORAGE_KEY, splitItSentRequests);
+}
+
+initializeSplitBillMockData();
+
 export async function fetchTransactionHistory(search = '') {
   await wait();
 

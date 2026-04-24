@@ -1,4 +1,4 @@
-import { BarChart3, ChevronDown, Clock3, ReceiptText } from 'lucide-react';
+import { BarChart3, ChevronDown, Clock3, Plus, ReceiptText } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { fetchIncomingRequests, fetchSentRequests } from '../api';
@@ -484,6 +484,16 @@ export function SplitBillDashboardPage() {
     <SplitItLayout
       title="Split bill dashboard"
       subtitle="Track bills you created and bills shared with you in one place."
+      headerRight={(
+        <button
+          type="button"
+          onClick={() => navigate('/splitit/create')}
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#0049ba] shadow-[0_8px_20px_rgba(0,0,0,0.12)] transition hover:bg-white/95"
+          aria-label="Create split bill"
+        >
+          <Plus className="h-5 w-5" />
+        </button>
+      )}
       footer=""
     >
       {loading ? (

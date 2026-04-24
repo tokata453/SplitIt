@@ -7,11 +7,20 @@ interface SplitItLayoutProps {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
+  headerRight?: ReactNode;
   backTo?: string;
   variant?: 'brand' | 'light';
 }
 
-export function SplitItLayout({ title, subtitle, children, footer, backTo = '/splitit', variant = 'brand' }: SplitItLayoutProps) {
+export function SplitItLayout({
+  title,
+  subtitle,
+  children,
+  footer,
+  headerRight,
+  backTo = '/splitit',
+  variant = 'brand',
+}: SplitItLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isLight = variant === 'light';
@@ -42,7 +51,9 @@ export function SplitItLayout({ title, subtitle, children, footer, backTo = '/sp
               <ArrowLeft className={isLight ? 'h-5 w-5 text-slate-700' : 'h-5 w-5 text-white'} />
             </button>
             <h1 className={isLight ? 'text-xl font-semibold text-slate-900' : 'text-xl font-semibold text-white'}>SplitIt</h1>
-            <div className="h-10 w-10" />
+            <div className="flex h-10 min-w-10 items-center justify-end">
+              {headerRight ?? <div className="h-10 w-10" />}
+            </div>
           </div>
           <h2 className={isLight ? 'text-[1.8rem] font-semibold tracking-[-0.03em] text-slate-900' : 'text-[1.8rem] font-semibold tracking-[-0.03em] text-white'}>{title}</h2>
           {subtitle ? <p className={isLight ? 'mt-2 text-sm leading-6 text-slate-500' : 'mt-2 text-sm leading-6 text-white/70'}>{subtitle}</p> : null}

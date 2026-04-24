@@ -32,7 +32,7 @@ function LockScreenNotificationCard({
     <button
       type="button"
       onClick={() => navigate(notification.to)}
-      className="relative w-full rounded-[28px] border border-white/15 bg-white/28 px-4 py-3.5 text-left shadow-[0_16px_44px_rgba(0,0,0,0.16)] backdrop-blur-[28px] transition"
+      className="relative w-full rounded-[28px] border border-white/15 bg-white/28 px-4 py-3 text-left shadow-[0_16px_44px_rgba(0,0,0,0.16)] backdrop-blur-[28px] transition"
     >
       <div className="flex items-start gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-white/88 shadow-sm">
@@ -48,12 +48,12 @@ function LockScreenNotificationCard({
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-800/65">
               Sathapana Bank
             </p>
-            <span className="shrink-0 pt-0.5 text-[0.95rem] font-medium text-slate-700/58">
+            <span className="shrink-0 pt-0.5 text-[0.88rem] font-medium text-slate-700/58">
               {notification.timeAgo}
             </span>
           </div>
 
-          <p className="mt-1 line-clamp-3 text-[1.02rem] font-medium leading-[1.32] text-slate-900/95">
+          <p className="mt-1 line-clamp-2 text-[0.98rem] font-medium leading-[1.28] text-slate-900/95">
             {notification.message}
           </p>
         </div>

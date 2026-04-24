@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import {
+  fetchParticipantSuggestions,
   fetchTransactionHistory,
   findParticipantByPhone,
   findParticipantByQrPayload,
@@ -103,7 +104,9 @@ export function CreateBillPage() {
   const location = useLocation();
   const [transactions, setTransactions] = useState<SplitItTransaction[]>([]);
   const [results, setResults] = useState<SplitItUser[]>([]);
+  const [suggestions, setSuggestions] = useState<SplitItUser[]>([]);
   const [search, setSearch] = useState('');
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const [qrStatus, setQrStatus] = useState('');
   const [searching, setSearching] = useState(false);
   const [isLensOpen, setIsLensOpen] = useState(false);
@@ -149,7 +152,11 @@ export function CreateBillPage() {
     { id: 'dining', label: 'Dining friends', participantIds: ['u-1', 'u-2', 'u-3'] },
     { id: 'team', label: 'Work team', participantIds: ['u-6', 'u-7', 'u-8'] },
   ].filter((group) => group.participantIds.length);
-  const inlineParticipantRows = search.trim() ? results : [];
+  const inlineParticipantRows = search.trim()
+    ? results
+    : isSearchActive
+    ? suggestions
+    : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +169,23 @@ export function CreateBillPage() {
     };
 
     void loadTransactions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSuggestions = async () => {
+      const response = await fetchParticipantSuggestions();
+      if (!cancelled) {
+        setSuggestions(response);
+      }
+    };
+
+    void loadSuggestions();
 
     return () => {
       cancelled = true;
@@ -578,6 +602,7 @@ export function CreateBillPage() {
               setSearch(event.target.value);
               setQrStatus('');
             }}
+            onFocus={() => setIsSearchActive(true)}
             placeholder="Search name, account, or phone"
             className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
           />
@@ -591,7 +616,7 @@ export function CreateBillPage() {
           </button>
         </div>
 
-        <div className="mt-3 space-y-2">
+        <div className={`mt-3 space-y-2 ${inlineParticipantRows.length > 3 ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
           {searching ? (
             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">Searching...</div>
           ) : inlineParticipantRows.length ? (
@@ -604,6 +629,8 @@ export function CreateBillPage() {
                 statusLabel={
                   previousParticipantIds.includes(participant.id)
                     ? 'Previous'
+                    : !search.trim()
+                    ? 'Favorite'
                     : undefined
                 }
               />
